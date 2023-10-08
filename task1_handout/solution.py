@@ -57,9 +57,11 @@ class Model(object):
         :param train_x_2D: Training features as a 2d NumPy float array of shape (NUM_SAMPLES, 2)
         :param train_y: Training pollution concentrations as a 1d NumPy float array of shape (NUM_SAMPLES,)
         """
+        # Use the generator to produce an integer seed
+        seed = self.rng.integers(low=0, high=4294967295)
 
         kernel = 1.0 * RBF(length_scale=1.0)
-        self.gp = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=20, random_state=self.rng)
+        self.gp = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=20, random_state=seed)
         self.gp.fit(train_x_2D, train_y)
 
 # You don't have to change this function
@@ -187,6 +189,10 @@ def extract_city_area_information(train_x: np.ndarray, test_x: np.ndarray) -> ty
 # you don't have to change this function
 def main():
     # Load the training dateset and test features
+
+    # TODO LOAD ONLY A FEW PERCENT OF THE DATA FOR TESTING #################################################################################################
+
+
     train_x = np.loadtxt('train_x.csv', delimiter=',', skiprows=1)
     train_y = np.loadtxt('train_y.csv', delimiter=',', skiprows=1)
     test_x = np.loadtxt('test_x.csv', delimiter=',', skiprows=1)
