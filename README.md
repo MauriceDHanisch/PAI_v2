@@ -14,7 +14,7 @@ git clone --recursive https://github.com/MauriceDHanisch/PAI_v2.git
 ### Install Python Dependencies
 Install python 3.9
 ```bash
-brew install python3.9
+brew install python@3.9
 ```
 
 Create a new env using pipenv
