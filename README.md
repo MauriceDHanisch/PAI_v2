@@ -12,12 +12,17 @@ git clone --recursive https://github.com/MauriceDHanisch/PAI_v2.git
 ```
 
 ### Install Python Dependencies
-Install python 3.9
+Install python 3.9 for MAC OS:
 ```bash
 brew install python@3.9
 ```
 
-Create a new env using pipenv
+Install pipenv:
+```bash
+pip install pipenv
+```
+
+Create a new env using pipenv (which python eventually only for MAC OS)
 ```bash
 pipenv --python $(which python3.9)
 ```
