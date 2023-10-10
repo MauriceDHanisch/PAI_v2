@@ -3,12 +3,13 @@ import typing
 from sklearn.gaussian_process.kernels import *
 import numpy as np
 from sklearn.gaussian_process import GaussianProcessRegressor
-import matplotlib.pyplot as plt
+from sklearn.kernel_approximation import Nystroem
+#import matplotlib.pyplot as plt
 from matplotlib import cm
-
+#os.chdir('C:\\Users\\MOUms\\VS Projects\\PAI_v2\\task1_handout')
 
 # Set `EXTENDED_EVALUATION` to `True` in order to visualize your predictions.
-EXTENDED_EVALUATION = False
+EXTENDED_EVALUATION = True
 EVALUATION_GRID_POINTS = 300  # Number of grid points used in extended evaluation
 
 # Cost function constants
@@ -60,9 +61,12 @@ class Model(object):
         # Use the generator to produce an integer seed
         seed = self.rng.integers(low=0, high=4294967295)
 
+        
+        nystroem = Nystroem(kernel='rbf', gamma=1.0, n_components=int(0.01*train_y.shape[0]), random_state=0)
+        X_nystroem = nystroem.fit_transform(train_x_2D)
         kernel = 1.0 * RBF(length_scale=1.0)
         self.gp = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=20, random_state=seed)
-        self.gp.fit(train_x_2D, train_y)
+        self.gp.fit(X_nystroem, train_y)
 
 # You don't have to change this function
 def cost_function(ground_truth: np.ndarray, predictions: np.ndarray, AREA_idxs: np.ndarray) -> float:
@@ -196,6 +200,11 @@ def main():
     train_x = np.loadtxt('train_x.csv', delimiter=',', skiprows=1)
     train_y = np.loadtxt('train_y.csv', delimiter=',', skiprows=1)
     test_x = np.loadtxt('test_x.csv', delimiter=',', skiprows=1)
+
+    # Shuffle the training data
+    #random_indices = np.random.choice(train_y.shape[0], int(0.05*train_y.shape[0]), replace=False)
+    #train_x = train_x[random_indices]
+    #train_y = train_y[random_indices]
 
     # Extract the city_area information
     train_x_2D, train_x_AREA, test_x_2D, test_x_AREA = extract_city_area_information(train_x, test_x)
