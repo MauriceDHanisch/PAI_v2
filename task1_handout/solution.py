@@ -9,7 +9,7 @@ from matplotlib import cm
 # os.chdir('C:\\Users\\MOUms\\VS Projects\\PAI_v2\\task1_handout')
 
 # Set `EXTENDED_EVALUATION` to `True` in order to visualize your predictions.
-EXTENDED_EVALUATION = True
+EXTENDED_EVALUATION = False
 EVALUATION_GRID_POINTS = 300  # Number of grid points used in extended evaluation
 
 # Cost function constants
@@ -59,13 +59,14 @@ class Model(object):
         # Use the generator to produce an integer seed
         seed = self.rng.integers(low=0, high=4294967295)
 
-        nystroem = Nystroem(kernel='rbf', gamma=1.0, n_components=int(
-            0.01*train_y.shape[0]), random_state=0)
-        X_nystroem = nystroem.fit_transform(train_x_2D)
+        # nystroem = Nystroem(kernel='rbf', gamma=1.0, n_components=int(
+        # 0.01*train_y.shape[0]), random_state=0)
+        # X_nystroem = nystroem.fit_transform(train_x_2D)
         kernel = 1.0 * RBF(length_scale=1.0)
         self.gp = GaussianProcessRegressor(
             kernel=kernel, n_restarts_optimizer=20, random_state=seed)
-        self.gp.fit(X_nystroem, train_y)
+        # self.gp.fit(X_nystroem, train_y)
+        self.gp.fit(train_x_2D, train_y)
 
 # You don't have to change this function
 
@@ -138,9 +139,8 @@ def determine_city_area_idx(visualization_xs_2D):
 
     return visualization_xs_AREA
 
+
 # You don't have to change this function
-
-
 def perform_extended_evaluation(model: Model, output_dir: str = '/results'):
     """
     Visualizes the predictions of a fitted model.
@@ -208,20 +208,23 @@ def extract_city_area_information(train_x: np.ndarray, test_x: np.ndarray) -> ty
 
 def main():
     # Load the training dateset and test features
+    print('Loading data')
     train_x = np.loadtxt('train_x.csv', delimiter=',', skiprows=1)
     train_y = np.loadtxt('train_y.csv', delimiter=',', skiprows=1)
     test_x = np.loadtxt('test_x.csv', delimiter=',', skiprows=1)
 
     # Take a random subset of the training data
-    percentage = 0.01
+    print('Taking a random subset of the training data')
+    percentage = 0.2
     random_indices = np.random.choice(train_y.shape[0], int(
-        percentage * train_y.shape[0]), replace=False)
+        percentage/100 * train_y.shape[0]), replace=False)
     train_x = train_x[random_indices]
     train_y = train_y[random_indices]
 
     # Extract the city_area information
     train_x_2D, train_x_AREA, test_x_2D, test_x_AREA = extract_city_area_information(
         train_x, test_x)
+
     # Fit the model
     print('Fitting model')
     model = Model()
