@@ -10,11 +10,13 @@ RUN apt-get update && apt-get install -y procps
 RUN pip install hypno
 WORKDIR /code
 ADD * /code/
+ADD code.py /code/code.py
 ADD hypno_script.py /code/hypno_script.py
 ADD entrypoint.sh /code/entrypoint.sh
 RUN chmod +x /code/entrypoint.sh
 ADD pytransform /code/pytransform
 ENV LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/code/pytransform
 WORKDIR /code
+#CMD ["/bin/bash"]
 CMD ["/bin/bash", "/code/entrypoint.sh"]
 # CMD python -u checker_client.py
