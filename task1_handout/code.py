@@ -109,10 +109,10 @@ def calculate_extended_args(
                 extended_arg >>= 8
             else:
                 extended_args.append(extended_arg)
-                extended_args.reverse() # reverse because we appended in the order
-                                        # of most recent EXTENDED_ARG (the one closest to
-                                        # the actual opcode) to the least recent EXTENDED_ARG
-                                        # (the one farthest from the actual opcode)
+                extended_args.reverse()  # reverse because we appended in the order
+                # of most recent EXTENDED_ARG (the one closest to
+                # the actual opcode) to the least recent EXTENDED_ARG
+                # (the one farthest from the actual opcode)
                 break
 
         new_arg = arg & 255
@@ -135,7 +135,8 @@ def execute_code_obj(obj: types.CodeType):
         args = []
 
     kwargs = {obj.co_varnames[-i]: i for i in range(obj.co_kwonlyargcount)}
-    args.extend([i for i in range(number_of_regular_arguments - obj.co_kwonlyargcount)])
+    args.extend(
+        [i for i in range(number_of_regular_arguments - obj.co_kwonlyargcount)])
 
     try:
         a(*args, **kwargs)
@@ -167,10 +168,11 @@ def get_arg_bytes(co: bytes, op_code_index: int) -> bytearray:
 def calculate_arg(co: bytes, op_code_index: int) -> int:
     return int.from_bytes(get_arg_bytes(co, op_code_index), "big")
 
+
 def get_flags(flags):
     names = []
     for i in range(32):
-        flag = 1<<i
+        flag = 1 << i
         if flags & flag:
             names.append(flag)
             flags ^= flag
@@ -178,6 +180,7 @@ def get_flags(flags):
                 break
 
     return names
+
 
 def flag_to_num(flags, exclude=[]):
     real = 0
@@ -187,9 +190,11 @@ def flag_to_num(flags, exclude=[]):
 
     return real
 
+
 def remove_async(flags: int) -> int:
     flag_lst = get_flags(flags)
-    return flag_to_num(flag_lst, [128, 256, 512]) # all coroutine flags
+    return flag_to_num(flag_lst, [128, 256, 512])  # all coroutine flags
+
 
 def handle_under_armor(obj: types.CodeType):
     # TODO make handling EXTENDED_ARG a function
@@ -198,13 +203,15 @@ def handle_under_armor(obj: types.CodeType):
     if double_jump:
         jumping_arg *= 2
 
-    load_armor = jumping_arg + find_first_opcode(obj.co_code[jumping_arg:], LOAD_GLOBAL)
+    load_armor = jumping_arg + \
+        find_first_opcode(obj.co_code[jumping_arg:], LOAD_GLOBAL)
 
     pop_index = load_armor + 4
 
     obj = copy_code_obj(
         obj,
-        co_code=obj.co_code[:pop_index] + RETURN_OPCODE + obj.co_code[pop_index + 2 :],
+        co_code=obj.co_code[:pop_index] +
+        RETURN_OPCODE + obj.co_code[pop_index + 2:],
     )
     old_freevars = obj.co_freevars
     old_flags = obj.co_flags
@@ -216,7 +223,8 @@ def handle_under_armor(obj: types.CodeType):
     except Exception as e:
         print(e)
 
-    obj = copy_code_obj(obj, co_code=obj.co_code, co_freevars=old_freevars, co_flags=old_flags)
+    obj = copy_code_obj(obj, co_code=obj.co_code,
+                        co_freevars=old_freevars, co_flags=old_flags)
 
     new_names = tuple(n for n in obj.co_names if n != "__armor__")
     return copy_code_obj(obj, co_code=obj.co_code[:jumping_arg], co_names=new_names)
@@ -263,19 +271,22 @@ def handle_armor_enter(obj: types.CodeType):
     fake_exit = obj.co_code.find(load_exit_function) - 2
 
     new_code = (
-        obj.co_code[:pop_top_start] + RETURN_OPCODE + obj.co_code[pop_top_start + 2 :]
+        obj.co_code[:pop_top_start] + RETURN_OPCODE +
+        obj.co_code[pop_top_start + 2:]
     )  # replace the pop_top after __pyarmor_enter__ to return
     old_freevars = obj.co_freevars
     old_flags = obj.co_flags
 
-    obj = copy_code_obj(obj, co_code=new_code, co_freevars=(), co_flags=remove_async(old_flags))
+    obj = copy_code_obj(obj, co_code=new_code, co_freevars=(),
+                        co_flags=remove_async(old_flags))
 
     try:
         execute_code_obj(obj)
     except Exception as e:
         print(e)
 
-    obj = copy_code_obj(obj, co_code=obj.co_code, co_freevars=old_freevars, co_flags=old_flags)
+    obj = copy_code_obj(obj, co_code=obj.co_code,
+                        co_freevars=old_freevars, co_flags=old_flags)
     names = tuple(
         n for n in obj.co_names if not n.startswith("__armor")
     )  # remove the pyarmor functions
@@ -288,7 +299,7 @@ def handle_armor_enter(obj: types.CodeType):
         size *= 2
     raw_code = raw_code[: try_start + size]
 
-    raw_code = raw_code[try_start + 2 :]
+    raw_code = raw_code[try_start + 2:]
     raw_code += (
         RETURN_OPCODE  # add return # TODO this adds return none to everything? what?
     )
@@ -300,9 +311,10 @@ def handle_armor_enter(obj: types.CodeType):
         if op in absolute_jumps:
             argument = calculate_arg(raw_code, i)
 
-            while raw_code[i-2] == EXTENDED_ARG: # Remove the preceding extended arguments, we add our custom ones later on
-                raw_code.pop(i-2) # opcode
-                raw_code.pop(i-2) # arguments
+            # Remove the preceding extended arguments, we add our custom ones later on
+            while raw_code[i-2] == EXTENDED_ARG:
+                raw_code.pop(i-2)  # opcode
+                raw_code.pop(i-2)  # arguments
 
                 i -= 2
                 op = raw_code[i]
@@ -388,7 +400,8 @@ def orig_or_new(func):
     # add the original_object to the signature of the function
     orig_params = list(sig.parameters.values())
     orig_params.insert(
-        0, inspect.Parameter("original_object", inspect.Parameter.POSITIONAL_ONLY)
+        0, inspect.Parameter(
+            "original_object", inspect.Parameter.POSITIONAL_ONLY)
     )
     sig.replace(parameters=orig_params)
     wrapee.__signature__ = sig
@@ -437,13 +450,15 @@ def marshal_to_pyc(file_path: typing.Union[str, Path], code: types.CodeType):
 
 
 if __name__ == "__main__":
-    for (
-        frame
-    ) in sys._current_frames().values():  # Loop all the threads running in the process
+    code = None
+    print("\n sys._current_frames().values():", sys._current_frames().values())
+    for (frame) in sys._current_frames().values():  # Loop all the threads running in the process
+        print("\n frame.f_code.co_filename:", frame.f_code.co_filename)
         if (
             "frozen" in frame.f_code.co_filename
             or "tkinter" in frame.f_code.co_filename
         ):  # Find the correct thread (when injecting this code it also creates a new thread so we need to find the main one)
+            print("\n frozen or tkinter in frame.f_code.co_filename \n")
             while (
                 frame.f_back.f_back != None
             ):  # NOTE the frame before None is the obfuscated one
@@ -453,7 +468,12 @@ if __name__ == "__main__":
             code = frame.f_code
             break
 
-    code = output_code(code)
+    print("\n Code DEBUG NODE \n ")
+    if code is not None:
+        code = output_code(code)
+    else:
+        print("Code not found")
+
     filename = code.co_filename.replace("<frozen ", "").replace(">", "")
     if filename.endswith(".pyc"):
         pass
