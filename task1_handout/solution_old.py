@@ -215,7 +215,7 @@ def main():
 
     # Take a random subset of the training data
     print('Taking a random subset of the training data')
-    percentage = 0.2
+    percentage = 50
     random_indices = np.random.choice(train_y.shape[0], int(
         percentage/100 * train_y.shape[0]), replace=False)
     train_x = train_x[random_indices]

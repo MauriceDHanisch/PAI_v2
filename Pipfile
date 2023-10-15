@@ -10,6 +10,7 @@ pyarmor = "==6.7.4"
 cryptography = "*"
 scikit-learn = "==1.3.0"
 matplotlib = "*"
+gpytorch = "*"
 
 [dev-packages]
 
