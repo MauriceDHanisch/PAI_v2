@@ -9,7 +9,7 @@ from matplotlib import cm
 # os.chdir('C:\\Users\\MOUms\\VS Projects\\PAI_v2\\task1_handout')
 
 # Set `EXTENDED_EVALUATION` to `True` in order to visualize your predictions.
-EXTENDED_EVALUATION = True
+EXTENDED_EVALUATION = False
 EVALUATION_GRID_POINTS = 300  # Number of grid points used in extended evaluation
 
 # Cost function constants
@@ -61,6 +61,11 @@ class Model(object):
         kernel = 1.0 * RBF(length_scale=1.0)
         self.gp = GaussianProcessRegressor(
             kernel=kernel, n_restarts_optimizer=20, random_state=seed)
+        random_indices = np.random.choice(
+            train_y.shape[0], int(0.01*train_y.shape[0]), replace=False)
+        print(train_x_2D)
+        train_x_2D = train_x_2D[random_indices]
+        train_y = train_y[random_indices]
         self.gp.fit(train_x_2D, train_y)
 
 # You don't have to change this function
@@ -204,18 +209,9 @@ def extract_city_area_information(train_x: np.ndarray, test_x: np.ndarray) -> ty
 
 def main():
     # Load the training dateset and test features
-
-    # TODO LOAD ONLY A FEW PERCENT OF THE DATA FOR TESTING #################################################################################################
-
     train_x = np.loadtxt('train_x.csv', delimiter=',', skiprows=1)
     train_y = np.loadtxt('train_y.csv', delimiter=',', skiprows=1)
     test_x = np.loadtxt('test_x.csv', delimiter=',', skiprows=1)
-
-    # Shuffle the training data
-    random_indices = np.random.choice(
-        train_y.shape[0], int(0.001*train_y.shape[0]), replace=False)
-    train_x = train_x[random_indices]
-    train_y = train_y[random_indices]
 
     # Extract the city_area information
     train_x_2D, train_x_AREA, test_x_2D, test_x_AREA = extract_city_area_information(
