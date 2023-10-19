@@ -32,9 +32,32 @@ class Model(object):
         We already provide a random number generator for reproducibility.
         """
         self.rng = np.random.default_rng(seed=0)
-        self.gp = None
+        # Use the generator to produce an integer seed
+        seed = self.rng.integers(low=0, high=4294967295)
 
-        # TODO: Add custom initialization for your model here if necessary
+        def custom_optimizer(obj_func, initial_theta, bounds):
+            max_iterations = 100
+            current_iteration = [0]
+            def callback(xk):
+                current_iteration[0] += 1
+                current_loss = obj_func(xk)
+                print(f"Iter {current_iteration[0]}/{max_iterations}. Curr params [.., prob length scale]: {xk}, Curr loss: {current_loss[0]}")
+
+            opt_res = fmin_l_bfgs_b(
+                obj_func, initial_theta, bounds=bounds, 
+                callback=callback, maxiter=max_iterations
+            )
+            theta_opt, func_min, _ = opt_res
+            return theta_opt, func_min
+
+        n_restart = 0
+        print("\n n_restart = ", n_restart)
+        kernel = 1.0 * RBF(length_scale=1.0, length_scale_bounds=(1e-6, 10.0))
+        
+        self.gp = GaussianProcessRegressor(
+            kernel=kernel, n_restarts_optimizer=n_restart, 
+            optimizer=custom_optimizer, random_state=seed)
+        
 
     def make_predictions(self, test_x_2D: np.ndarray, test_x_AREA: np.ndarray) -> typing.Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
@@ -58,25 +81,6 @@ class Model(object):
         :param train_x_2D: Training features as a 2d NumPy float array of shape (NUM_SAMPLES, 2)
         :param train_y: Training pollution concentrations as a 1d NumPy float array of shape (NUM_SAMPLES,)
         """
-
-        def custom_optimizer(obj_func, initial_theta, bounds):
-            max_iterations = 100
-            current_iteration = [0]
-            def callback(xk):
-                current_iteration[0] += 1
-                current_loss = obj_func(xk)
-                print(f"Iter {current_iteration[0]}/{max_iterations}. Curr params [.., prob length scale]: {xk}, Curr loss: {current_loss[0]}")
-
-            opt_res = fmin_l_bfgs_b(
-                obj_func, initial_theta, bounds=bounds, 
-                callback=callback, maxiter=max_iterations
-            )
-            theta_opt, func_min, _ = opt_res
-            return theta_opt, func_min
-    
-        # Use the generator to produce an integer seed
-        seed = self.rng.integers(low=0, high=4294967295)
-
         # Take a random subset of the training data
         print("\n \n---------  Change test  ------------\n \n ")
         print('Taking a random subset of the training data')
@@ -86,20 +90,6 @@ class Model(object):
 
         train_x_2D = train_x_2D[random_indices]
         train_y = train_y[random_indices]
-
-        # nystroem = Nystroem(kernel='rbf', gamma=1.0, n_components=int(
-        # 0.01*train_y.shape[0]), random_state=0)
-        # X_nystroem = nystroem.fit_transform(train_x_2D)
-        kernel = 1.0 * RBF(length_scale=1.0, length_scale_bounds=(1e-6, 10.0))
-
-        n_restart = 0
-        print("\n n_restart = ", n_restart)
-
-        self.gp = GaussianProcessRegressor(
-            kernel=kernel, n_restarts_optimizer=n_restart, 
-            optimizer=custom_optimizer, random_state=seed)
-        
-        # self.gp.fit(X_nystroem, train_y)
 
         print(f'\n ----- Fitting the GP with {percentage}%-------\n')
         self.gp.fit(train_x_2D, train_y)
