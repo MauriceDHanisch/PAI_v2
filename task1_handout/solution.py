@@ -6,7 +6,9 @@ from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.kernel_approximation import Nystroem
 import matplotlib.pyplot as plt
 from matplotlib import cm
-# os.chdir('C:\\Users\\MOUms\\VS Projects\\PAI_v2\\task1_handout')
+import time
+from scipy.optimize import fmin_l_bfgs_b
+
 
 # Set `EXTENDED_EVALUATION` to `True` in order to visualize your predictions.
 EXTENDED_EVALUATION = False
@@ -56,12 +58,29 @@ class Model(object):
         :param train_x_2D: Training features as a 2d NumPy float array of shape (NUM_SAMPLES, 2)
         :param train_y: Training pollution concentrations as a 1d NumPy float array of shape (NUM_SAMPLES,)
         """
+
+        def custom_optimizer(obj_func, initial_theta, bounds):
+            max_iterations = 100
+            current_iteration = [0]
+            def callback(xk):
+                current_iteration[0] += 1
+                current_loss = obj_func(xk)
+                print(f"Iter {current_iteration[0]}/{max_iterations}. Curr params: {xk}, Curr loss: {current_loss[0]}")
+
+            opt_res = fmin_l_bfgs_b(
+                obj_func, initial_theta, bounds=bounds, 
+                callback=callback, maxiter=max_iterations
+            )
+            theta_opt, func_min, _ = opt_res
+            return theta_opt, func_min
+    
         # Use the generator to produce an integer seed
         seed = self.rng.integers(low=0, high=4294967295)
 
         # Take a random subset of the training data
+        print("\n \n---------  Change test  ------------\n \n ")
         print('Taking a random subset of the training data')
-        percentage = 15
+        percentage = 10
         random_indices = np.random.choice(train_y.shape[0], int(
             percentage/100 * train_y.shape[0]), replace=False)
 
@@ -71,11 +90,18 @@ class Model(object):
         # nystroem = Nystroem(kernel='rbf', gamma=1.0, n_components=int(
         # 0.01*train_y.shape[0]), random_state=0)
         # X_nystroem = nystroem.fit_transform(train_x_2D)
-        kernel = 1.0 * RBF(length_scale=1.0)
+        kernel = 1.0 * RBF(length_scale=1.0, length_scale_bounds=(1e-6, 10.0))
+
+        n_restart = 0
+        print("\n n_restart = ", n_restart)
+
         self.gp = GaussianProcessRegressor(
-            kernel=kernel, n_restarts_optimizer=20, random_state=seed)
+            kernel=kernel, n_restarts_optimizer=n_restart, 
+            optimizer=custom_optimizer, random_state=seed)
+        
         # self.gp.fit(X_nystroem, train_y)
-        print('Fitting the GP')
+
+        print('\n ----- Fitting the GP -------\n')
         self.gp.fit(train_x_2D, train_y)
 
 # You don't have to change this function
