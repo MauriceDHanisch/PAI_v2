@@ -3,7 +3,9 @@ import typing
 from sklearn.gaussian_process.kernels import *
 import numpy as np
 from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.kernel_approximation import Nystroem
+from sklearn.kernel_approximation import Nystroem, RBFSampler
+from sklearn.model_selection import GridSearchCV
+from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
 from matplotlib import cm
 # os.chdir('C:\\Users\\MOUms\\VS Projects\\PAI_v2\\task1_handout')
@@ -57,16 +59,57 @@ class Model(object):
         :param train_y: Training pollution concentrations as a 1d NumPy float array of shape (NUM_SAMPLES,)
         """
         # Use the generator to produce an integer seed
-        seed = self.rng.integers(low=0, high=4294967295)
+        # seed = self.rng.integers(low=0, high=4294967295)
+        seed = 0
         kernel = 1.0 * RBF(length_scale=1.0)
-        self.gp = GaussianProcessRegressor(
-            kernel=kernel, n_restarts_optimizer=20, random_state=seed)
+        gp = GaussianProcessRegressor(
+            kernel=kernel, n_restarts_optimizer=20, random_state=seed, normalize_y=True)
+        # Define a range of length scales and degrees of freedom (nu) for Matérn kernels
+        nu_values = 0.5*np.arange(1, 6)
+        length_scales = 0.1*np.arange(1, 6)
+
+        # Create a parameter grid to search through
+        param_grid = {
+            'kernel': [Matern(length_scale=l, nu=nu) for l in length_scales for nu in nu_values],
+            'n_restarts_optimizer': [20]
+        }
         random_indices = np.random.choice(
-            train_y.shape[0], int(0.01*train_y.shape[0]), replace=False)
-        print(train_x_2D)
+            train_y.shape[0], int(0.005*train_y.shape[0]), replace=False)
         train_x_2D = train_x_2D[random_indices]
         train_y = train_y[random_indices]
+
+        # Create an RFF sampler to approximate the RBF kernel
+        # Adjust the gamma parameter as needed
+        # rff = RBFSampler(gamma=1.0, n_components=2)
+
+        # Perform the RFF approximation on the selected subset of training data
+        # print("RFF kernel matrix is being computed...")
+        # train_x_2D_rff = rff.fit_transform(train_x_2D)
+        # print("RFF kernel matrix has been computed.")
+
+        # nystroem = Nystroem(kernel=kernel, n_components=int(
+        #     0.03*train_y.shape[0]), random_state=seed)
+        # print("Nystroem kernel matrix is being computed...")
+        # train_x_2D_nystroem = nystroem.fit_transform(train_x_2D)
+        # print("Nystroem kernel matrix has been computed.")
+
+        # Grid search with cross-validation to find the best hyperparameters
+        # grid_search = GridSearchCV(
+        #    gp, param_grid, cv=5, scoring='neg_mean_squared_error')
+        # grid_search.fit(train_x_2D, train_y)
+
+        # Best hyperparameters and corresponding model
+        # best_hyperparameters = grid_search.best_params_
+        # best_model = grid_search.best_estimator_
+        # self.gp = best_model
+        # self.gp = gp.set_params(
+        #    **{'kernel': Matern(length_scale=3, nu=2.5), 'n_restarts_optimizer': 20})
+        # self.gp = gp.set_params(**{'kernel': Matern(
+        #    length_scale=1, nu=2), 'n_restarts_optimizer': 20})
+        self.gp = gp
+        print("GP is being fitted...")
         self.gp.fit(train_x_2D, train_y)
+        print("GP has been fitted.")
 
 # You don't have to change this function
 
