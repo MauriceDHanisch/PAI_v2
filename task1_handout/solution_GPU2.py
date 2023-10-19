@@ -16,6 +16,20 @@ EVALUATION_GRID_POINTS = 300  # Number of grid points used in extended evaluatio
 COST_W_UNDERPREDICT = 50.0
 COST_W_NORMAL = 1.0
 
+import torch
+import gpytorch
+
+class GPRegressionModel(gpytorch.models.ExactGP):
+    def __init__(self, train_x, train_y, likelihood):
+        super(GPRegressionModel, self).__init__(train_x, train_y, likelihood)
+        self.mean_module = gpytorch.means.ConstantMean()
+        self.covar_module = gpytorch.kernels.ScaleKernel(gpytorch.kernels.RBFKernel())
+
+    def forward(self, x):
+        mean_x = self.mean_module(x)
+        covar_x = self.covar_module(x)
+        return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
+
 
 class Model(object):
     """
@@ -35,42 +49,69 @@ class Model(object):
         # TODO: Add custom initialization for your model here if necessary
 
     def make_predictions(self, test_x_2D: np.ndarray, test_x_AREA: np.ndarray) -> typing.Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """
-        Predict the pollution concentration for a given set of city_areas.
-        :param test_x_2D: city_areas as a 2d NumPy float array of shape (NUM_SAMPLES, 2)
-        :param test_x_AREA: city_area info for every sample in a form of a bool array (NUM_SAMPLES,)
-        :return:
-            Tuple of three 1d NumPy float arrays, each of shape (NUM_SAMPLES,),
-            containing your predictions, the GP posterior mean, and the GP posterior stddev (in that order)
-        """
+    # Set device and model to evaluation mode
+        device = torch.device("mps")
+        self.gp.eval()
+        self.gp.likelihood.eval()
 
-        gp_mean, gp_std = self.gp.predict(test_x_2D, return_std=True)
+        # Convert test data to PyTorch tensors and move to device
+        test_x_tensor = torch.tensor(test_x_2D, dtype=torch.float32).to(device)
+        test_x_AREA_tensor = torch.tensor(test_x_AREA, dtype=torch.bool).to(device)
+
+        # Make predictions
+        with torch.no_grad(), gpytorch.settings.fast_pred_var():
+            observed_pred = self.gp.likelihood(self.gp(test_x_tensor))
+            gp_mean = observed_pred.mean
+            gp_std = observed_pred.stddev
+
+        # Convert predictions back to numpy
+        gp_mean = gp_mean.cpu().numpy()
+        gp_std = gp_std.cpu().numpy()
+
+        # Apply adjustment based on test_x_AREA
         adjustment = np.where(test_x_AREA, gp_std, 0)
         predictions = gp_mean + adjustment
 
         return predictions, gp_mean, gp_std
-
+    
     def fitting_model(self, train_y: np.ndarray, train_x_2D: np.ndarray):
         """
         Fit your model on the given training data.
         :param train_x_2D: Training features as a 2d NumPy float array of shape (NUM_SAMPLES, 2)
         :param train_y: Training pollution concentrations as a 1d NumPy float array of shape (NUM_SAMPLES,)
         """
-        # Use the generator to produce an integer seed
+        # Fitting the seed
         seed = self.rng.integers(low=0, high=4294967295)
+        torch.manual_seed(seed)
 
-        # nystroem = Nystroem(kernel='rbf', gamma=1.0, n_components=int(
-        # 0.01*train_y.shape[0]), random_state=0)
-        # X_nystroem = nystroem.fit_transform(train_x_2D)
-        kernel = 1.0 * RBF(length_scale=1.0)
-        self.gp = GaussianProcessRegressor(
-            kernel=kernel, n_restarts_optimizer=20, random_state=seed)
-        # self.gp.fit(X_nystroem, train_y)
-        self.gp.fit(train_x_2D, train_y)
+        # Specify the device
+        device = torch.device("mps")
+
+        # Convert numpy arrays to PyTorch tensors and move to device
+        train_x_tensor = torch.tensor(train_x_2D, dtype=torch.float32).to(device)
+        train_y_tensor = torch.tensor(train_y, dtype=torch.float32).to(device)
+
+        # Initialize likelihood and model, and move to device
+        likelihood = gpytorch.likelihoods.GaussianLikelihood().to(device)
+        self.gp = GPRegressionModel(train_x_tensor, train_y_tensor, likelihood).to(device)
+
+        # Use the adam optimizer
+        optimizer = torch.optim.Adam(self.gp.parameters(), lr=0.1)
+
+        # "Loss" for GPs - the marginal log likelihood
+        mll = gpytorch.mlls.ExactMarginalLogLikelihood(likelihood, self.gp)
+
+        # Training loop
+        for i in range(50):
+            optimizer.zero_grad()
+            output = self.gp(train_x_tensor)
+            loss = -mll(output, train_y_tensor)
+            loss.backward()
+            print(f"Iter {i + 1}/{50} - Loss: {loss.item()}")
+            optimizer.step()
+
 
 # You don't have to change this function
-
-
 def cost_function(ground_truth: np.ndarray, predictions: np.ndarray, AREA_idxs: np.ndarray) -> float:
     """
     Calculates the cost of a set of predictions.
@@ -215,7 +256,7 @@ def main():
 
     # Take a random subset of the training data
     print('Taking a random subset of the training data')
-    percentage = 50
+    percentage = 4
     random_indices = np.random.choice(train_y.shape[0], int(
         percentage/100 * train_y.shape[0]), replace=False)
     train_x = train_x[random_indices]
