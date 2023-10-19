@@ -61,7 +61,7 @@ class Model(object):
 
         # Take a random subset of the training data
         print('Taking a random subset of the training data')
-        percentage = 1
+        percentage = 15
         random_indices = np.random.choice(train_y.shape[0], int(
             percentage/100 * train_y.shape[0]), replace=False)
 
@@ -75,6 +75,7 @@ class Model(object):
         self.gp = GaussianProcessRegressor(
             kernel=kernel, n_restarts_optimizer=20, random_state=seed)
         # self.gp.fit(X_nystroem, train_y)
+        print('Fitting the GP')
         self.gp.fit(train_x_2D, train_y)
 
 # You don't have to change this function
