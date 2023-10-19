@@ -34,6 +34,7 @@ class Model(object):
         Initialize your model here.
         We already provide a random number generator for reproducibility.
         """
+        self.callback_verbose = False
         self.rng = np.random.default_rng(seed=0)
         # Use the generator to produce an integer seed
         seed = self.rng.integers(low=0, high=4294967295)
@@ -45,7 +46,7 @@ class Model(object):
         matern_kernel = Matern(length_scale=1.0, nu=0.5)
 
         self.gp = GaussianProcessRegressor(
-            kernel=kernel, n_restarts_optimizer=n_restart,
+            kernel=matern_kernel, n_restarts_optimizer=n_restart,
             optimizer=self.custom_optimizer, random_state=seed)
 
     def custom_optimizer(self, obj_func, initial_theta, bounds):
@@ -55,8 +56,9 @@ class Model(object):
         def callback(xk):
             current_iteration[0] += 1
             current_loss = obj_func(xk)
-            print(
-                f"Iter {current_iteration[0]}/{max_iterations}. Curr params [.., prob length scale]: {xk}, Curr loss: {current_loss[0]}")
+            if self.callback_verbose:
+                print(
+                    f"Iter {current_iteration[0]}/{max_iterations}. Curr params [.., prob length scale]: {xk}, Curr loss: {current_loss[0]}")
 
         opt_res = fmin_l_bfgs_b(
             obj_func, initial_theta, bounds=bounds,
@@ -96,13 +98,35 @@ class Model(object):
         :param train_x_2D: Training features as a 2d NumPy float array of shape (NUM_SAMPLES, 2)
         :param train_y: Training pollution concentrations as a 1d NumPy float array of shape (NUM_SAMPLES,)
         """
-        # Take a random subset of the training data
         print('\n Taking a random subset of the training data \n')
         percentage = 10
         train_x_2D, train_y = self.few_percent(percentage, train_y, train_x_2D)
 
         print(f'\n ----- Fitting the GP with {percentage}%-------\n')
-        self.gp.fit(train_x_2D, train_y)
+        # Define a range of length scales and degrees of freedom (nu) for Matérn kernels
+        nu_values = 0.5 * np.arange(1, 6)
+        length_scales = 0.1 * np.arange(1, 6)
+
+        # Create a parameter grid to search through
+        param_grid = {
+            'kernel': [Matern(length_scale=l, nu=nu) for l in length_scales for nu in nu_values],
+            'n_restarts_optimizer': [0]
+        }
+
+        # Grid search with 5-fold cross-validation
+        grid_search = GridSearchCV(self.gp, param_grid, cv=5, scoring='neg_mean_squared_error')
+        
+        # Fit grid search
+        grid_search.fit(train_x_2D, train_y)
+
+        # Extract the best hyperparameters and corresponding model
+        best_hyperparameters = grid_search.best_params_
+        best_model = grid_search.best_estimator_
+        
+        self.gp = best_model
+        
+        print("\n ----------- GP has been fitted with the best hyperparameters: ", best_hyperparameters)
+
 
 
 # You don't have to change this function
