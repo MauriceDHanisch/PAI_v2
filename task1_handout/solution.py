@@ -59,6 +59,15 @@ class Model(object):
         # Use the generator to produce an integer seed
         seed = self.rng.integers(low=0, high=4294967295)
 
+        # Take a random subset of the training data
+        print('Taking a random subset of the training data')
+        percentage = 1
+        random_indices = np.random.choice(train_y.shape[0], int(
+            percentage/100 * train_y.shape[0]), replace=False)
+
+        train_x_2D = train_x_2D[random_indices]
+        train_y = train_y[random_indices]
+
         # nystroem = Nystroem(kernel='rbf', gamma=1.0, n_components=int(
         # 0.01*train_y.shape[0]), random_state=0)
         # X_nystroem = nystroem.fit_transform(train_x_2D)
@@ -204,27 +213,15 @@ def extract_city_area_information(train_x: np.ndarray, test_x: np.ndarray) -> ty
     return train_x_2D, train_x_AREA, test_x_2D, test_x_AREA
 
 # you don't have to change this function
-
-
 def main():
     # Load the training dateset and test features
-    print('Loading data')
     train_x = np.loadtxt('train_x.csv', delimiter=',', skiprows=1)
     train_y = np.loadtxt('train_y.csv', delimiter=',', skiprows=1)
     test_x = np.loadtxt('test_x.csv', delimiter=',', skiprows=1)
 
-    # Take a random subset of the training data
-    print('Taking a random subset of the training data')
-    percentage = 50
-    random_indices = np.random.choice(train_y.shape[0], int(
-        percentage/100 * train_y.shape[0]), replace=False)
-    train_x = train_x[random_indices]
-    train_y = train_y[random_indices]
-
     # Extract the city_area information
     train_x_2D, train_x_AREA, test_x_2D, test_x_AREA = extract_city_area_information(
         train_x, test_x)
-
     # Fit the model
     print('Fitting model')
     model = Model()
