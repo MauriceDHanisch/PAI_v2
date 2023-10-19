@@ -65,7 +65,7 @@ class Model(object):
             def callback(xk):
                 current_iteration[0] += 1
                 current_loss = obj_func(xk)
-                print(f"Iter {current_iteration[0]}/{max_iterations}. Curr params: {xk}, Curr loss: {current_loss[0]}")
+                print(f"Iter {current_iteration[0]}/{max_iterations}. Curr params [.., prob length scale]: {xk}, Curr loss: {current_loss[0]}")
 
             opt_res = fmin_l_bfgs_b(
                 obj_func, initial_theta, bounds=bounds, 
@@ -80,7 +80,7 @@ class Model(object):
         # Take a random subset of the training data
         print("\n \n---------  Change test  ------------\n \n ")
         print('Taking a random subset of the training data')
-        percentage = 10
+        percentage = 50
         random_indices = np.random.choice(train_y.shape[0], int(
             percentage/100 * train_y.shape[0]), replace=False)
 
@@ -101,12 +101,10 @@ class Model(object):
         
         # self.gp.fit(X_nystroem, train_y)
 
-        print('\n ----- Fitting the GP -------\n')
+        print(f'\n ----- Fitting the GP with {percentage}%-------\n')
         self.gp.fit(train_x_2D, train_y)
 
 # You don't have to change this function
-
-
 def cost_function(ground_truth: np.ndarray, predictions: np.ndarray, AREA_idxs: np.ndarray) -> float:
     """
     Calculates the cost of a set of predictions.
