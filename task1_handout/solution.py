@@ -40,12 +40,12 @@ class Model(object):
 
         n_restart = 0
         print("\n Setting model with n_restart = ", n_restart)
-        kernel = 1.0 * RBF(length_scale=1.0, length_scale_bounds=(1e-6, 10.0))
+        #kernel = 1.0 * RBF(length_scale=1.0, length_scale_bounds=(1e-6, 10.0))
         # Setting up Matern Kernel with default length_scale and nu
-        matern_kernel = Matern(length_scale=1.0, nu=0.5)
+        matern_kernel = Matern(length_scale=0.1, nu=1)
 
         self.gp = GaussianProcessRegressor(
-            kernel=kernel, n_restarts_optimizer=n_restart,
+            kernel=matern_kernel, n_restarts_optimizer=n_restart,
             optimizer=self.custom_optimizer, random_state=seed)
 
     def custom_optimizer(self, obj_func, initial_theta, bounds):
