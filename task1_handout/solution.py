@@ -1,13 +1,17 @@
 import os
 import typing
-from sklearn.gaussian_process.kernels import *
 import numpy as np
-from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.kernel_approximation import Nystroem
 import matplotlib.pyplot as plt
-from matplotlib import cm
-import time
+
+from sklearn.gaussian_process.kernels import *
+from sklearn.gaussian_process import GaussianProcessRegressor
+
 from scipy.optimize import fmin_l_bfgs_b
+
+from sklearn.kernel_approximation import Nystroem
+from sklearn.gaussian_process.kernels import Matern
+from sklearn.model_selection import GridSearchCV
+
 
 
 # Set `EXTENDED_EVALUATION` to `True` in order to visualize your predictions.
@@ -37,7 +41,7 @@ class Model(object):
 
         n_restart = 0
         print("\n n_restart = ", n_restart)
-        kernel = 1.0 * RBF(length_scale=1.0, length_scale_bounds=(1e-6, 10.0))
+        kernel = 1.0 * RBF(length_scale=1.0, length_scale_bounds=(1e-6, 10.0))   
 
         self.gp = GaussianProcessRegressor(
             kernel=kernel, n_restarts_optimizer=n_restart,
