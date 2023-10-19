@@ -13,7 +13,6 @@ from sklearn.gaussian_process.kernels import Matern
 from sklearn.model_selection import GridSearchCV
 
 
-
 # Set `EXTENDED_EVALUATION` to `True` in order to visualize your predictions.
 EXTENDED_EVALUATION = False
 EVALUATION_GRID_POINTS = 300  # Number of grid points used in extended evaluation
@@ -40,27 +39,31 @@ class Model(object):
         seed = self.rng.integers(low=0, high=4294967295)
 
         n_restart = 0
-        print("\n n_restart = ", n_restart)
-        kernel = 1.0 * RBF(length_scale=1.0, length_scale_bounds=(1e-6, 10.0))   
+        print("\n Setting model with n_restart = ", n_restart)
+        kernel = 1.0 * RBF(length_scale=1.0, length_scale_bounds=(1e-6, 10.0))
+        # Setting up Matern Kernel with default length_scale and nu
+        matern_kernel = Matern(length_scale=1.0, nu=0.5)
 
         self.gp = GaussianProcessRegressor(
             kernel=kernel, n_restarts_optimizer=n_restart,
             optimizer=self.custom_optimizer, random_state=seed)
-    
-    def custom_optimizer(self, obj_func, initial_theta, bounds):
-            max_iterations = 100
-            current_iteration = [0]
-            def callback(xk):
-                current_iteration[0] += 1
-                current_loss = obj_func(xk)
-                print(f"Iter {current_iteration[0]}/{max_iterations}. Curr params [.., prob length scale]: {xk}, Curr loss: {current_loss[0]}")
 
-            opt_res = fmin_l_bfgs_b(
-                obj_func, initial_theta, bounds=bounds, 
-                callback=callback, maxiter=max_iterations
-            )
-            theta_opt, func_min, _ = opt_res
-            return theta_opt, func_min
+    def custom_optimizer(self, obj_func, initial_theta, bounds):
+        max_iterations = 100
+        current_iteration = [0]
+
+        def callback(xk):
+            current_iteration[0] += 1
+            current_loss = obj_func(xk)
+            print(
+                f"Iter {current_iteration[0]}/{max_iterations}. Curr params [.., prob length scale]: {xk}, Curr loss: {current_loss[0]}")
+
+        opt_res = fmin_l_bfgs_b(
+            obj_func, initial_theta, bounds=bounds,
+            callback=callback, maxiter=max_iterations
+        )
+        theta_opt, func_min, _ = opt_res
+        return theta_opt, func_min
 
     def make_predictions(self, test_x_2D: np.ndarray, test_x_AREA: np.ndarray) -> typing.Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
@@ -77,6 +80,15 @@ class Model(object):
         predictions = gp_mean + adjustment
 
         return predictions, gp_mean, gp_std
+    
+    def few_percent(self, percentage, train_y: np.ndarray, train_x_2D: np.ndarray):
+        random_indices = np.random.choice(train_y.shape[0], int(
+            percentage/100 * train_y.shape[0]), replace=False)
+
+        train_x_2D = train_x_2D[random_indices]
+        train_y = train_y[random_indices]
+
+        return train_x_2D, train_y
 
     def fitting_model(self, train_y: np.ndarray, train_x_2D: np.ndarray):
         """
@@ -85,21 +97,15 @@ class Model(object):
         :param train_y: Training pollution concentrations as a 1d NumPy float array of shape (NUM_SAMPLES,)
         """
         # Take a random subset of the training data
-        print("\n \n---------  Change test  ------------\n \n ")
-        print('Taking a random subset of the training data')
+        print('\n Taking a random subset of the training data \n')
         percentage = 10
-        random_indices = np.random.choice(train_y.shape[0], int(
-            percentage/100 * train_y.shape[0]), replace=False)
-
-        train_x_2D = train_x_2D[random_indices]
-        train_y = train_y[random_indices]
+        train_x_2D, train_y = self.few_percent(percentage, train_y, train_x_2D)
 
         print(f'\n ----- Fitting the GP with {percentage}%-------\n')
         self.gp.fit(train_x_2D, train_y)
 
+
 # You don't have to change this function
-
-
 def cost_function(ground_truth: np.ndarray, predictions: np.ndarray, AREA_idxs: np.ndarray) -> float:
     """
     Calculates the cost of a set of predictions.
@@ -134,9 +140,8 @@ def is_in_circle(coor, circle_coor):
     """
     return (coor[0] - circle_coor[0])**2 + (coor[1] - circle_coor[1])**2 < circle_coor[2]**2
 
+
 # You don't have to change this function
-
-
 def determine_city_area_idx(visualization_xs_2D):
     """
     Determines the city_area index for each coordinate in the visualization grid.
@@ -232,9 +237,8 @@ def extract_city_area_information(train_x: np.ndarray, test_x: np.ndarray) -> ty
 
     return train_x_2D, train_x_AREA, test_x_2D, test_x_AREA
 
+
 # you don't have to change this function
-
-
 def main():
     # Load the training dateset and test features
     train_x = np.loadtxt('train_x.csv', delimiter=',', skiprows=1)
