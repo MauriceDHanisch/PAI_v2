@@ -74,7 +74,7 @@ class Model(object):
             'n_restarts_optimizer': [20]
         }
         random_indices = np.random.choice(
-            train_y.shape[0], int(0.005*train_y.shape[0]), replace=False)
+            train_y.shape[0], int(0.03*train_y.shape[0]), replace=False)
         train_x_2D = train_x_2D[random_indices]
         train_y = train_y[random_indices]
 
@@ -106,7 +106,8 @@ class Model(object):
         #    **{'kernel': Matern(length_scale=3, nu=2.5), 'n_restarts_optimizer': 20})
         # self.gp = gp.set_params(**{'kernel': Matern(
         #    length_scale=1, nu=2), 'n_restarts_optimizer': 20})
-        self.gp = gp
+        self.gp = gp.set_params(**{'kernel': Matern(
+            length_scale=0.5, nu=1), 'n_restarts_optimizer': 20})
         print("GP is being fitted...")
         self.gp.fit(train_x_2D, train_y)
         print("GP has been fitted.")
