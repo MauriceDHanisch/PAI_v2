@@ -26,16 +26,7 @@ class Model(object):
     without changing their signatures, but are allowed to create additional methods.
     """
 
-    def __init__(self):
-        """
-        Initialize your model here.
-        We already provide a random number generator for reproducibility.
-        """
-        self.rng = np.random.default_rng(seed=0)
-        # Use the generator to produce an integer seed
-        seed = self.rng.integers(low=0, high=4294967295)
-
-        def custom_optimizer(obj_func, initial_theta, bounds):
+    def custom_optimizer(self, obj_func, initial_theta, bounds):
             max_iterations = 100
             current_iteration = [0]
             def callback(xk):
@@ -50,13 +41,22 @@ class Model(object):
             theta_opt, func_min, _ = opt_res
             return theta_opt, func_min
 
+    def __init__(self):
+        """
+        Initialize your model here.
+        We already provide a random number generator for reproducibility.
+        """
+        self.rng = np.random.default_rng(seed=0)
+        # Use the generator to produce an integer seed
+        seed = self.rng.integers(low=0, high=4294967295)        
+
         n_restart = 0
         print("\n n_restart = ", n_restart)
         kernel = 1.0 * RBF(length_scale=1.0, length_scale_bounds=(1e-6, 10.0))
         
         self.gp = GaussianProcessRegressor(
             kernel=kernel, n_restarts_optimizer=n_restart, 
-            optimizer=custom_optimizer, random_state=seed)
+            optimizer=self.custom_optimizer, random_state=seed)
         
 
     def make_predictions(self, test_x_2D: np.ndarray, test_x_AREA: np.ndarray) -> typing.Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -84,7 +84,7 @@ class Model(object):
         # Take a random subset of the training data
         print("\n \n---------  Change test  ------------\n \n ")
         print('Taking a random subset of the training data')
-        percentage = 50
+        percentage = 10
         random_indices = np.random.choice(train_y.shape[0], int(
             percentage/100 * train_y.shape[0]), replace=False)
 
