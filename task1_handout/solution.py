@@ -61,7 +61,8 @@ class Model(object):
         # Use the generator to produce an integer seed
         # seed = self.rng.integers(low=0, high=4294967295)
         seed = 0
-        kernel = 1.0 * RBF(length_scale=1.0)
+        np.random.seed(seed)
+        kernel = Matern(length_scale=1, nu=1.3)
         gp = GaussianProcessRegressor(
             kernel=kernel, n_restarts_optimizer=20, random_state=seed, normalize_y=True)
         # Define a range of length scales and degrees of freedom (nu) for Matérn kernels
@@ -106,8 +107,7 @@ class Model(object):
         #    **{'kernel': Matern(length_scale=3, nu=2.5), 'n_restarts_optimizer': 20})
         # self.gp = gp.set_params(**{'kernel': Matern(
         #    length_scale=1, nu=2), 'n_restarts_optimizer': 20})
-        self.gp = gp.set_params(**{'kernel': Matern(
-            length_scale=0.5, nu=1), 'n_restarts_optimizer': 20})
+        self.gp = gp
         print("GP is being fitted...")
         self.gp.fit(train_x_2D, train_y)
         print("GP has been fitted.")
