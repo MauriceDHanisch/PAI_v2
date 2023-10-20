@@ -78,12 +78,9 @@ class Model(object):
             containing your predictions, the GP posterior mean, and the GP posterior stddev (in that order)
         """
 
-        # TODO: Use your GP to estimate the posterior mean and stddev for each city_area here
-        gp_mean = np.zeros(test_x_2D.shape[0], dtype=float)
-        gp_std = np.zeros(test_x_2D.shape[0], dtype=float)
-
-        # TODO: Use the GP posterior to form your predictions here
-        predictions = gp_mean
+        gp_mean, gp_std = self.gp.predict(test_x_2D, return_std=True)
+        adjustment = np.where(test_x_AREA, gp_std, 0)
+        predictions = gp_mean + adjustment
 
         return predictions, gp_mean, gp_std
     
@@ -128,7 +125,8 @@ def cost_function(ground_truth: np.ndarray, predictions: np.ndarray, AREA_idxs: 
     weights = np.ones_like(cost) * COST_W_NORMAL
 
     # Case i): underprediction
-    mask = (predictions < ground_truth) & [bool(AREA_idx) for AREA_idx in AREA_idxs]
+    mask = (predictions < ground_truth) & [
+        bool(AREA_idx) for AREA_idx in AREA_idxs]
     weights[mask] = COST_W_UNDERPREDICT
 
     # Weigh the cost and return the average
@@ -155,27 +153,29 @@ def determine_city_area_idx(visualization_xs_2D):
     """
     # Circles coordinates
     circles = np.array([[0.5488135, 0.71518937, 0.17167342],
-                    [0.79915856, 0.46147936, 0.1567626 ],
-                    [0.26455561, 0.77423369, 0.10298338],
-                    [0.6976312,  0.06022547, 0.04015634],
-                    [0.31542835, 0.36371077, 0.17985623],
-                    [0.15896958, 0.11037514, 0.07244247],
-                    [0.82099323, 0.09710128, 0.08136552],
-                    [0.41426299, 0.0641475,  0.04442035],
-                    [0.09394051, 0.5759465,  0.08729856],
-                    [0.84640867, 0.69947928, 0.04568374],
-                    [0.23789282, 0.934214,   0.04039037],
-                    [0.82076712, 0.90884372, 0.07434012],
-                    [0.09961493, 0.94530153, 0.04755969],
-                    [0.88172021, 0.2724369,  0.04483477],
-                    [0.9425836,  0.6339977,  0.04979664]])
-    
+                        [0.79915856, 0.46147936, 0.1567626],
+                        [0.26455561, 0.77423369, 0.10298338],
+                        [0.6976312,  0.06022547, 0.04015634],
+                        [0.31542835, 0.36371077, 0.17985623],
+                        [0.15896958, 0.11037514, 0.07244247],
+                        [0.82099323, 0.09710128, 0.08136552],
+                        [0.41426299, 0.0641475,  0.04442035],
+                        [0.09394051, 0.5759465,  0.08729856],
+                        [0.84640867, 0.69947928, 0.04568374],
+                        [0.23789282, 0.934214,   0.04039037],
+                        [0.82076712, 0.90884372, 0.07434012],
+                        [0.09961493, 0.94530153, 0.04755969],
+                        [0.88172021, 0.2724369,  0.04483477],
+                        [0.9425836,  0.6339977,  0.04979664]])
+
     visualization_xs_AREA = np.zeros((visualization_xs_2D.shape[0],))
 
-    for i,coor in enumerate(visualization_xs_2D):
-        visualization_xs_AREA[i] = any([is_in_circle(coor, circ) for circ in circles])
+    for i, coor in enumerate(visualization_xs_2D):
+        visualization_xs_AREA[i] = any(
+            [is_in_circle(coor, circ) for circ in circles])
 
     return visualization_xs_AREA
+
 
 # You don't have to change this function
 def perform_extended_evaluation(model: Model, output_dir: str = '/results'):
@@ -188,16 +188,22 @@ def perform_extended_evaluation(model: Model, output_dir: str = '/results'):
 
     # Visualize on a uniform grid over the entire coordinate system
     grid_lat, grid_lon = np.meshgrid(
-        np.linspace(0, EVALUATION_GRID_POINTS - 1, num=EVALUATION_GRID_POINTS) / EVALUATION_GRID_POINTS,
-        np.linspace(0, EVALUATION_GRID_POINTS - 1, num=EVALUATION_GRID_POINTS) / EVALUATION_GRID_POINTS,
+        np.linspace(0, EVALUATION_GRID_POINTS - 1,
+                    num=EVALUATION_GRID_POINTS) / EVALUATION_GRID_POINTS,
+        np.linspace(0, EVALUATION_GRID_POINTS - 1,
+                    num=EVALUATION_GRID_POINTS) / EVALUATION_GRID_POINTS,
     )
-    visualization_xs_2D = np.stack((grid_lon.flatten(), grid_lat.flatten()), axis=1)
+    visualization_xs_2D = np.stack(
+        (grid_lon.flatten(), grid_lat.flatten()), axis=1)
     visualization_xs_AREA = determine_city_area_idx(visualization_xs_2D)
-    
+
     # Obtain predictions, means, and stddevs over the entire map
-    predictions, gp_mean, gp_stddev = model.make_predictions(visualization_xs_2D, visualization_xs_AREA)
-    predictions = np.reshape(predictions, (EVALUATION_GRID_POINTS, EVALUATION_GRID_POINTS))
-    gp_mean = np.reshape(gp_mean, (EVALUATION_GRID_POINTS, EVALUATION_GRID_POINTS))
+    predictions, gp_mean, gp_stddev = model.make_predictions(
+        visualization_xs_2D, visualization_xs_AREA)
+    predictions = np.reshape(
+        predictions, (EVALUATION_GRID_POINTS, EVALUATION_GRID_POINTS))
+    gp_mean = np.reshape(
+        gp_mean, (EVALUATION_GRID_POINTS, EVALUATION_GRID_POINTS))
 
     vmin, vmax = 0.0, 65.0
 
@@ -205,7 +211,7 @@ def perform_extended_evaluation(model: Model, output_dir: str = '/results'):
     fig, ax = plt.subplots()
     ax.set_title('Extended visualization of task 1')
     im = ax.imshow(predictions, vmin=vmin, vmax=vmax)
-    cbar = fig.colorbar(im, ax = ax)
+    cbar = fig.colorbar(im, ax=ax)
 
     # Save figure to pdf
     figure_path = os.path.join(output_dir, 'extended_evaluation.pdf')
@@ -223,12 +229,10 @@ def extract_city_area_information(train_x: np.ndarray, test_x: np.ndarray) -> ty
     :return: Tuple of (training features' 2D coordinates, training features' city_area information,
         test features' 2D coordinates, test features' city_area information)
     """
-    train_x_2D = np.zeros((train_x.shape[0], 2), dtype=float)
-    train_x_AREA = np.zeros((train_x.shape[0],), dtype=bool)
-    test_x_2D = np.zeros((test_x.shape[0], 2), dtype=float)
-    test_x_AREA = np.zeros((test_x.shape[0],), dtype=bool)
-
-    #TODO: Extract the city_area information from the training and test features
+    train_x_2D = train_x[:, :2]
+    train_x_AREA = train_x[:, 2].astype(bool)
+    test_x_2D = test_x[:, :2]
+    test_x_AREA = test_x[:, 2].astype(bool)
 
     assert train_x_2D.shape[0] == train_x_AREA.shape[0] and test_x_2D.shape[0] == test_x_AREA.shape[0]
     assert train_x_2D.shape[1] == 2 and test_x_2D.shape[1] == 2
@@ -250,7 +254,7 @@ def main():
     # Fit the model
     print('Fitting model')
     model = Model()
-    model.fitting_model(train_y,train_x_2D)
+    model.fitting_model(train_y, train_x_2D)
 
     # Predict on the test features
     print('Predicting on test features')
