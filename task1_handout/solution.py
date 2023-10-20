@@ -62,7 +62,7 @@ class Model(object):
         # seed = self.rng.integers(low=0, high=4294967295)
         seed = 0
         np.random.seed(seed)
-        kernel = Matern(length_scale=1, nu=1.3)
+        kernel = Matern(length_scale=0.025, nu=0.5)
         gp = GaussianProcessRegressor(
             kernel=kernel, n_restarts_optimizer=20, random_state=seed, normalize_y=True)
         # Define a range of length scales and degrees of freedom (nu) for Matérn kernels
