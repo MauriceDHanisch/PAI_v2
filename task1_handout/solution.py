@@ -42,8 +42,8 @@ class Model(object):
         n_restart = 0
         print("\n Setting model with n_restart = ", n_restart)
         
-        # Setting up Matern Kernel with default length_scale and nu        
-        matern_kernel = Matern(length_scale=0.1, nu=1) # nu - 1 times differentiable
+        # Setting up Matern Kernel with CV optimized length_scale and nu        
+        matern_kernel = Matern(length_scale=0.0174, nu=0.5, length_scale_bounds=(1e-3, 1e2)) # nu - 1 times differentiable
 
         self.gp = GaussianProcessRegressor(
             kernel=matern_kernel, n_restarts_optimizer=n_restart,
@@ -58,7 +58,7 @@ class Model(object):
             current_loss = obj_func(xk)
             timestamp = (datetime.now() + timedelta(hours=2)).strftime("%H:%M:%S")
             print(
-                f"{timestamp} Iter {current_iteration[0]}/{max_iterations}. Curr params [.., prob length scale]: {xk}, neg llh: {current_loss[0]}")
+                f"{timestamp} Iter {current_iteration[0]}/{max_iterations}. Curr params [log(lengthscale)]: {xk}, neg llh: {current_loss[0]}")
 
         opt_res = fmin_l_bfgs_b(
             obj_func, initial_theta, bounds=bounds,
@@ -100,8 +100,8 @@ class Model(object):
         """
         # Take a random subset of the training data
         print('\n Taking a random subset of the training data \n')
-        percentage = 60
-        train_x_2D, train_y = self.few_percent(percentage, train_y, train_x_2D)
+        percentage = 100
+        #train_x_2D, train_y = self.few_percent(percentage, train_y, train_x_2D)
 
         print(f'\n ----- Fitting the GP with {percentage}%-------\n')
         self.gp.fit(train_x_2D, train_y)

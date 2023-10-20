@@ -1,0 +1,78 @@
+[?2004h(base) ]0;mambauser@a8cdd79fad8e: /codemambauser@a8cdd79fad8e:/code$ python /results/checker_client.py 
+[?2004l
+ Setting model with n_restart =  0
+
+ Taking a random subset of the training data 
+
+
+ ----- Fitting the GP with 100%-------
+
+Traceback (most recent call last):
+  File "</results/checker_client.py>", line 3, in <module>
+  File "<frozen checker_client>", line 252, in <module>
+  File "<frozen checker_client>", line 158, in generate_results_dict
+  File "/results/solution.py", line 107, in fitting_model
+    self.gp.fit(train_x_2D, train_y)
+  File "/opt/conda/lib/python3.8/site-packages/sklearn/base.py", line 1151, in wrapper
+    return fit_method(estimator, *args, **kwargs)
+  File "/opt/conda/lib/python3.8/site-packages/sklearn/gaussian_process/_gpr.py", line 303, in fit
+    self._constrained_optimization(
+  File "/opt/conda/lib/python3.8/site-packages/sklearn/gaussian_process/_gpr.py", line 662, in _constrained_optimization
+    theta_opt, func_min = self.optimizer(obj_func, initial_theta, bounds=bounds)
+  File "/results/solution.py", line 63, in custom_optimizer
+    opt_res = fmin_l_bfgs_b(
+  File "/opt/conda/lib/python3.8/site-packages/scipy/optimize/lbfgsb.py", line 197, in fmin_l_bfgs_b
+    res = _minimize_lbfgsb(fun, x0, args=args, jac=jac, bounds=bounds,
+  File "/opt/conda/lib/python3.8/site-packages/scipy/optimize/lbfgsb.py", line 287, in _minimize_lbfgsb
+    bounds = [(None if l == -np.inf else l, None if u == np.inf else u) for l, u in bounds]
+  File "/opt/conda/lib/python3.8/site-packages/scipy/optimize/lbfgsb.py", line 287, in <listcomp>
+    bounds = [(None if l == -np.inf else l, None if u == np.inf else u) for l, u in bounds]
+ValueError: not enough values to unpack (expected 2, got 1)
+[?2004h(base) ]0;mambauser@a8cdd79fad8e: /codemambauser@a8cdd79fad8e:/code$ python /results/checker_client.py 
+[?2004l
+ Setting model with n_restart =  0
+
+ Taking a random subset of the training data 
+
+
+ ----- Fitting the GP with 100%-------
+
+Traceback (most recent call last):
+  File "</results/checker_client.py>", line 3, in <module>
+  File "<frozen checker_client>", line 252, in <module>
+  File "<frozen checker_client>", line 158, in generate_results_dict
+  File "/results/solution.py", line 107, in fitting_model
+    self.gp.fit(train_x_2D, train_y)
+  File "/opt/conda/lib/python3.8/site-packages/sklearn/base.py", line 1151, in wrapper
+    return fit_method(estimator, *args, **kwargs)
+  File "/opt/conda/lib/python3.8/site-packages/sklearn/gaussian_process/_gpr.py", line 303, in fit
+    self._constrained_optimization(
+  File "/opt/conda/lib/python3.8/site-packages/sklearn/gaussian_process/_gpr.py", line 662, in _constrained_optimization
+    theta_opt, func_min = self.optimizer(obj_func, initial_theta, bounds=bounds)
+  File "/results/solution.py", line 63, in custom_optimizer
+    opt_res = fmin_l_bfgs_b(
+  File "/opt/conda/lib/python3.8/site-packages/scipy/optimize/lbfgsb.py", line 197, in fmin_l_bfgs_b
+    res = _minimize_lbfgsb(fun, x0, args=args, jac=jac, bounds=bounds,
+  File "/opt/conda/lib/python3.8/site-packages/scipy/optimize/lbfgsb.py", line 287, in _minimize_lbfgsb
+    bounds = [(None if l == -np.inf else l, None if u == np.inf else u) for l, u in bounds]
+  File "/opt/conda/lib/python3.8/site-packages/scipy/optimize/lbfgsb.py", line 287, in <listcomp>
+    bounds = [(None if l == -np.inf else l, None if u == np.inf else u) for l, u in bounds]
+ValueError: not enough values to unpack (expected 2, got 1)
+[?2004h(base) ]0;mambauser@a8cdd79fad8e: /codemambauser@a8cdd79fad8e:/code$ python /results/checker_client.py 
+[?2004l
+ Setting model with n_restart =  0
+
+ Taking a random subset of the training data 
+
+
+ ----- Fitting the GP with 100%-------
+
+10:31:30 Iter 1/100. Curr params [log(lengthscale)]: [-3.56491347], neg llh: 331950.02093875385
+10:32:51 Iter 2/100. Curr params [log(lengthscale)]: [-3.66239393], neg llh: 328200.672955435
+10:34:12 Iter 3/100. Curr params [log(lengthscale)]: [-3.68415962], neg llh: 328078.01970155287
+10:35:33 Iter 4/100. Curr params [log(lengthscale)]: [-3.68319555], neg llh: 328077.75889658165
+10:36:53 Iter 5/100. Curr params [log(lengthscale)]: [-3.68320393], neg llh: 328077.75887650205
+\Congratulations, you beat the hard baseline in terms of public cost. Your public cost is 9.143
+Dumped check file to /results/results_check.byte
+[?2004h(base) ]0;mambauser@a8cdd79fad8e: /codemambauser@a8cdd79fad8e:/code$ gut [K[K[K[Kexit
+[?2004lexit
