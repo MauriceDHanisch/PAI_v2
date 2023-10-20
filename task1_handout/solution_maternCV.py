@@ -1,3 +1,5 @@
+# Solution mattern CV 
+
 import os
 import typing
 import numpy as np
@@ -88,7 +90,7 @@ class Model(object):
             percentage/100 * train_y.shape[0]), replace=False)
 
         train_x_2D = train_x_2D[random_indices]
-        train_y = train_y[random_indices]
+        train_y = train_y[random_indices]   
 
         return train_x_2D, train_y
 
@@ -99,7 +101,7 @@ class Model(object):
         :param train_y: Training pollution concentrations as a 1d NumPy float array of shape (NUM_SAMPLES,)
         """
         print('\n Taking a random subset of the training data \n')
-        percentage = 10
+        percentage = 100
         train_x_2D, train_y = self.few_percent(percentage, train_y, train_x_2D)
 
         print(f'\n ----- Fitting the GP with {percentage}%-------\n')
