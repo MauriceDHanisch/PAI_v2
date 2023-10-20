@@ -1,0 +1,18 @@
+[?2004h(base) ]0;mambauser@133b25b2666e: /codemambauser@133b25b2666e:/code$ python /results/checker_client.py 
+[?2004l
+ Setting model with n_restart =  0
+
+ Taking a random subset of the training data 
+
+
+ ----- Fitting the GP with 10%-------
+
+10:54:42 Iter 1/100. Curr params [log(lengthscale)]: [-3.05150389], neg llh: 117696.36340745568
+10:54:43 Iter 2/100. Curr params [log(lengthscale)]: [-3.11465817], neg llh: 116976.92614619253
+10:54:43 Iter 3/100. Curr params [log(lengthscale)]: [-3.14488675], neg llh: 116895.09129381517
+10:54:43 Iter 4/100. Curr params [log(lengthscale)]: [-3.14404819], neg llh: 116895.02548576004
+10:54:44 Iter 5/100. Curr params [log(lengthscale)]: [-3.14405611], neg llh: 116895.02547977891
+
+ You did not beat the easy baseline in terms of public cost. Try to improve your solution. Your public cost is 312.905 and the easy baseline is 45.480
+Dumped check file to /results/results_check.byte
+[?2004h(base) ]0;mambauser@133b25b2666e: /codemambauser@133b25b2666e:/code$ 
