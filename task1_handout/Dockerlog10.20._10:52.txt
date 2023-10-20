@@ -1,9 +1,0 @@
-[?2004h(base) ]0;mambauser@637c4467ca25: /codemambauser@637c4467ca25:/code$ b[Kpython /results//[Kchecker_client.py 
-[?2004l\
- Setting model with n_restart =  0
-
- Taking a random subset of the training data 
-
-
- ----- Fitting the GP with 10%-------
-
