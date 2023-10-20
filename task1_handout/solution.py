@@ -1,5 +1,6 @@
 import os
 import typing
+from datetime import datetime, timedelta
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -56,8 +57,9 @@ class Model(object):
         def callback(xk):
             current_iteration[0] += 1
             current_loss = obj_func(xk)
+            timestamp = (datetime.now() + timedelta(hours=2)).strftime("%H:%M:%S")
             print(
-                f"Iter {current_iteration[0]}/{max_iterations}. Curr params [.., prob length scale]: {xk}, neg llh: {current_loss[0]}")
+                f"{timestamp} Iter {current_iteration[0]}/{max_iterations}. Curr params [.., prob length scale]: {xk}, neg llh: {current_loss[0]}")
 
         opt_res = fmin_l_bfgs_b(
             obj_func, initial_theta, bounds=bounds,
@@ -99,7 +101,7 @@ class Model(object):
         """
         # Take a random subset of the training data
         print('\n Taking a random subset of the training data \n')
-        percentage = 40
+        percentage = 70
         train_x_2D, train_y = self.few_percent(percentage, train_y, train_x_2D)
 
         print(f'\n ----- Fitting the GP with {percentage}%-------\n')
