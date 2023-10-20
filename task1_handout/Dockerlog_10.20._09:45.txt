@@ -83,4 +83,7 @@ Dumped check file to /results/results_check.byte
 
 Congratulations, you beat the medium baseline in terms of public cost. However, you did not pass the hard baseline in terms of public cost. Try to improve your solution. Your public cost is 25.750 and the hard public baseline is 21.719
 Dumped check file to /results/results_check.byte
-[?2004h(base) ]0;mambauser@f203ba617836: /codemambauser@f203ba617836:/code$ 
+[?2004h(base) ]0;mambauser@f203ba617836: /codemambauser@f203ba617836:/code$ git checkout main
+[?2004lbash: git: command not found
+[?2004h(base) ]0;mambauser@f203ba617836: /codemambauser@f203ba617836:/code$ gi[K[Kgit chce[K[K[K[K[K[K[K[Kexit
+[?2004lexit
