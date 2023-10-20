@@ -42,6 +42,7 @@ class Model(object):
         print("\n Setting model with n_restart = ", n_restart)
         #kernel = 1.0 * RBF(length_scale=1.0, length_scale_bounds=(1e-6, 10.0))
         # Setting up Matern Kernel with default length_scale and nu
+        rbf_kernel = RBF(length_scale=0.1)
         matern_kernel = Matern(length_scale=0.1, nu=1)
 
         self.gp = GaussianProcessRegressor(
@@ -56,7 +57,7 @@ class Model(object):
             current_iteration[0] += 1
             current_loss = obj_func(xk)
             print(
-                f"Iter {current_iteration[0]}/{max_iterations}. Curr params [.., prob length scale]: {xk}, Curr loss: {current_loss[0]}")
+                f"Iter {current_iteration[0]}/{max_iterations}. Curr params [.., prob length scale]: {xk}, neg llh: {current_loss[0]}")
 
         opt_res = fmin_l_bfgs_b(
             obj_func, initial_theta, bounds=bounds,
@@ -98,7 +99,7 @@ class Model(object):
         """
         # Take a random subset of the training data
         print('\n Taking a random subset of the training data \n')
-        percentage = 30
+        percentage = 40
         train_x_2D, train_y = self.few_percent(percentage, train_y, train_x_2D)
 
         print(f'\n ----- Fitting the GP with {percentage}%-------\n')
