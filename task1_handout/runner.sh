@@ -4,7 +4,7 @@
 docker build --tag task1 .
 
 # Generate a unique filename based on the current date and time
-timestamp=$(date +%m.%d._%H:%M)
+timestamp=$(date +%m.%d._%Hh%M)
 log_file="Dockerlog$timestamp.txt"
 
 # Run the Docker container and save the logs to the file

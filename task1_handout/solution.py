@@ -36,6 +36,7 @@ class Model(object):
         We already provide a random number generator for reproducibility.
         """
         self.rng = np.random.default_rng(seed=0)
+
         # Use the generator to produce an integer seed
         seed = self.rng.integers(low=0, high=4294967295)
 
@@ -87,7 +88,7 @@ class Model(object):
         return predictions, gp_mean, gp_std
     
     def few_percent(self, percentage, train_y: np.ndarray, train_x_2D: np.ndarray):
-        random_indices = np.random.choice(train_y.shape[0], int(
+        random_indices = self.rng.choice(train_y.shape[0], int(
             percentage/100 * train_y.shape[0]), replace=False)
 
         train_x_2D = train_x_2D[random_indices]
@@ -104,7 +105,7 @@ class Model(object):
         # Take a random subset of the training data
         print('\n Taking a random subset of the training data \n')
         percentage = 100
-        #train_x_2D, train_y = self.few_percent(percentage, train_y, train_x_2D)
+        train_x_2D, train_y = self.few_percent(percentage, train_y, train_x_2D)
 
         print(f'\n ----- Fitting the GP with {percentage}%-------\n')
         self.gp.fit(train_x_2D, train_y)
