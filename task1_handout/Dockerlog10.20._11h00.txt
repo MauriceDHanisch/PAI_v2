@@ -15,4 +15,23 @@
 
  You did not beat the easy baseline in terms of public cost. Try to improve your solution. Your public cost is 312.905 and the easy baseline is 45.480
 Dumped check file to /results/results_check.byte
-[?2004h(base) ]0;mambauser@91a1a4dc5219: /codemambauser@91a1a4dc5219:/code$ 
+[?2004h(base) ]0;mambauser@91a1a4dc5219: /codemambauser@91a1a4dc5219:/code$ pt[Kython /result/[Ks/checker_client.py 
+[?2004l
+ Setting model with n_restart =  0
+
+ Taking a random subset of the training data 
+
+
+ ----- Fitting the GP with 100%-------
+
+11:10:43 Iter 1/100. Curr params [log(lengthscale)]: [-3.56491347], neg llh: 331950.02093874326
+11:12:05 Iter 2/100. Curr params [log(lengthscale)]: [-3.66239393], neg llh: 328200.6729554349
+11:13:26 Iter 3/100. Curr params [log(lengthscale)]: [-3.68415962], neg llh: 328078.0197015533
+11:14:46 Iter 4/100. Curr params [log(lengthscale)]: [-3.68319555], neg llh: 328077.7588965814
+11:16:06 Iter 5/100. Curr params [log(lengthscale)]: [-3.68320393], neg llh: 328077.75887650216
+\Congratulations, you beat the hard baseline in terms of public cost. Your public cost is 9.143
+Dumped check file to /results/results_check.byte
+[?2004h(base) ]0;mambauser@91a1a4dc5219: /codemambauser@91a1a4dc5219:/code$ xit
+[?2004lbash: xit: command not found
+[?2004h(base) ]0;mambauser@91a1a4dc5219: /codemambauser@91a1a4dc5219:/code$ exit
+[?2004lexit
