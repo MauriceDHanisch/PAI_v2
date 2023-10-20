@@ -41,10 +41,9 @@ class Model(object):
 
         n_restart = 0
         print("\n Setting model with n_restart = ", n_restart)
-        #kernel = 1.0 * RBF(length_scale=1.0, length_scale_bounds=(1e-6, 10.0))
-        # Setting up Matern Kernel with default length_scale and nu
-        rbf_kernel = RBF(length_scale=0.1)
-        matern_kernel = Matern(length_scale=0.1, nu=1)
+        
+        # Setting up Matern Kernel with default length_scale and nu        
+        matern_kernel = Matern(length_scale=0.1, nu=1) # nu - 1 times differentiable
 
         self.gp = GaussianProcessRegressor(
             kernel=matern_kernel, n_restarts_optimizer=n_restart,
@@ -101,7 +100,7 @@ class Model(object):
         """
         # Take a random subset of the training data
         print('\n Taking a random subset of the training data \n')
-        percentage = 70
+        percentage = 60
         train_x_2D, train_y = self.few_percent(percentage, train_y, train_x_2D)
 
         print(f'\n ----- Fitting the GP with {percentage}%-------\n')
