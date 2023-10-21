@@ -3,10 +3,9 @@ import typing
 from sklearn.gaussian_process.kernels import *
 import numpy as np
 from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.kernel_approximation import Nystroem
 import matplotlib.pyplot as plt
 from matplotlib import cm
-# os.chdir('C:\\Users\\MOUms\\VS Projects\\PAI_v2\\task1_handout')
+
 
 # Set `EXTENDED_EVALUATION` to `True` in order to visualize your predictions.
 EXTENDED_EVALUATION = False
@@ -30,7 +29,6 @@ class Model(object):
         We already provide a random number generator for reproducibility.
         """
         self.rng = np.random.default_rng(seed=0)
-        self.gp = None
 
         # TODO: Add custom initialization for your model here if necessary
 
@@ -44,9 +42,14 @@ class Model(object):
             containing your predictions, the GP posterior mean, and the GP posterior stddev (in that order)
         """
 
-        gp_mean, gp_std = self.gp.predict(test_x_2D, return_std=True)
-        adjustment = np.where(test_x_AREA, gp_std, 0)
-        predictions = gp_mean + adjustment
+        # TODO: Use your GP to estimate the posterior mean and stddev for each city_area here
+        gp_mean = np.zeros(test_x_2D.shape[0], dtype=float)
+        gp_std = np.zeros(test_x_2D.shape[0], dtype=float)
+
+        gp_mean, gp_std = self.gpr.predict(test_x_2D, return_std=True)    
+
+        # TODO: Use the GP posterior to form your predictions here
+        predictions = gp_mean + np.where(test_x_AREA, gp_std, 0)
 
         return predictions, gp_mean, gp_std
 
@@ -56,21 +59,17 @@ class Model(object):
         :param train_x_2D: Training features as a 2d NumPy float array of shape (NUM_SAMPLES, 2)
         :param train_y: Training pollution concentrations as a 1d NumPy float array of shape (NUM_SAMPLES,)
         """
-        # Use the generator to produce an integer seed
         seed = self.rng.integers(low=0, high=4294967295)
 
-        # nystroem = Nystroem(kernel='rbf', gamma=1.0, n_components=int(
-        # 0.01*train_y.shape[0]), random_state=0)
-        # X_nystroem = nystroem.fit_transform(train_x_2D)
-        kernel = 1.0 * RBF(length_scale=1.0)
-        self.gp = GaussianProcessRegressor(
-            kernel=kernel, n_restarts_optimizer=20, random_state=seed)
-        # self.gp.fit(X_nystroem, train_y)
-        self.gp.fit(train_x_2D, train_y)
+        # TODO: Fit your model here
+        kernel = Matern(length_scale=1.0, nu=1.5)
+        self.gpr = GaussianProcessRegressor(kernel=kernel,
+                                            n_restarts_optimizer=10,
+                                            random_state=2)
+        self.gpr.fit(train_x_2D, train_y)
+        pass
 
 # You don't have to change this function
-
-
 def cost_function(ground_truth: np.ndarray, predictions: np.ndarray, AREA_idxs: np.ndarray) -> float:
     """
     Calculates the cost of a set of predictions.
@@ -87,8 +86,7 @@ def cost_function(ground_truth: np.ndarray, predictions: np.ndarray, AREA_idxs: 
     weights = np.ones_like(cost) * COST_W_NORMAL
 
     # Case i): underprediction
-    mask = (predictions < ground_truth) & [
-        bool(AREA_idx) for AREA_idx in AREA_idxs]
+    mask = (predictions < ground_truth) & [bool(AREA_idx) for AREA_idx in AREA_idxs]
     weights[mask] = COST_W_UNDERPREDICT
 
     # Weigh the cost and return the average
@@ -106,8 +104,6 @@ def is_in_circle(coor, circle_coor):
     return (coor[0] - circle_coor[0])**2 + (coor[1] - circle_coor[1])**2 < circle_coor[2]**2
 
 # You don't have to change this function
-
-
 def determine_city_area_idx(visualization_xs_2D):
     """
     Determines the city_area index for each coordinate in the visualization grid.
@@ -204,31 +200,18 @@ def extract_city_area_information(train_x: np.ndarray, test_x: np.ndarray) -> ty
     return train_x_2D, train_x_AREA, test_x_2D, test_x_AREA
 
 # you don't have to change this function
-
-
 def main():
     # Load the training dateset and test features
-    print('Loading data')
     train_x = np.loadtxt('train_x.csv', delimiter=',', skiprows=1)
     train_y = np.loadtxt('train_y.csv', delimiter=',', skiprows=1)
     test_x = np.loadtxt('test_x.csv', delimiter=',', skiprows=1)
 
-    # Take a random subset of the training data
-    print('Taking a random subset of the training data')
-    percentage = 0.2
-    random_indices = np.random.choice(train_y.shape[0], int(
-        percentage/100 * train_y.shape[0]), replace=False)
-    train_x = train_x[random_indices]
-    train_y = train_y[random_indices]
-
     # Extract the city_area information
-    train_x_2D, train_x_AREA, test_x_2D, test_x_AREA = extract_city_area_information(
-        train_x, test_x)
-
+    train_x_2D, train_x_AREA, test_x_2D, test_x_AREA = extract_city_area_information(train_x, test_x)
     # Fit the model
     print('Fitting model')
     model = Model()
-    model.fitting_model(train_y, train_x_2D)
+    model.fitting_model(train_y,train_x_2D)
 
     # Predict on the test features
     print('Predicting on test features')
@@ -237,7 +220,6 @@ def main():
 
     if EXTENDED_EVALUATION:
         perform_extended_evaluation(model, output_dir='.')
-
 
 if __name__ == "__main__":
     main()
