@@ -1,6 +1,7 @@
+# Solution mattern CV 
+
 import os
 import typing
-from datetime import datetime, timedelta
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -35,16 +36,16 @@ class Model(object):
         Initialize your model here.
         We already provide a random number generator for reproducibility.
         """
+        self.callback_verbose = False
         self.rng = np.random.default_rng(seed=0)
-
         # Use the generator to produce an integer seed
         seed = self.rng.integers(low=0, high=4294967295)
 
         n_restart = 0
         print("\n Setting model with n_restart = ", n_restart)
-        
-        # Setting up Matern Kernel with CV optimized length_scale and nu        
-        matern_kernel = Matern(length_scale=0.0174, nu=0.5, length_scale_bounds=(1e-3, 1e2)) # nu - 1 times differentiable
+        kernel = 1.0 * RBF(length_scale=1.0, length_scale_bounds=(1e-6, 10.0))
+        # Setting up Matern Kernel with default length_scale and nu
+        matern_kernel = Matern(length_scale=1.0, nu=0.5)
 
         self.gp = GaussianProcessRegressor(
             kernel=matern_kernel, n_restarts_optimizer=n_restart,
@@ -57,9 +58,9 @@ class Model(object):
         def callback(xk):
             current_iteration[0] += 1
             current_loss = obj_func(xk)
-            timestamp = (datetime.now() + timedelta(hours=2)).strftime("%H:%M:%S")
-            print(
-                f"{timestamp} Iter {current_iteration[0]}/{max_iterations}. Curr params [log(lengthscale)]: {xk}, neg llh: {current_loss[0]}")
+            if self.callback_verbose:
+                print(
+                    f"Iter {current_iteration[0]}/{max_iterations}. Curr params [.., prob length scale]: {xk}, Curr loss: {current_loss[0]}")
 
         opt_res = fmin_l_bfgs_b(
             obj_func, initial_theta, bounds=bounds,
@@ -78,23 +79,18 @@ class Model(object):
             containing your predictions, the GP posterior mean, and the GP posterior stddev (in that order)
         """
 
-        # TODO: Use your GP to estimate the posterior mean and stddev for each city_area here
-        gp_mean = np.zeros(test_x_2D.shape[0], dtype=float)
-        gp_std = np.zeros(test_x_2D.shape[0], dtype=float)
-
-        gp_mean, gp_std = self.gpr.predict(test_x_2D, return_std=True)    
-
-        # TODO: Use the GP posterior to form your predictions here
-        predictions = gp_mean + np.where(test_x_AREA, gp_std, 0)
+        gp_mean, gp_std = self.gp.predict(test_x_2D, return_std=True)
+        adjustment = np.where(test_x_AREA, gp_std, 0)
+        predictions = gp_mean + adjustment
 
         return predictions, gp_mean, gp_std
     
     def few_percent(self, percentage, train_y: np.ndarray, train_x_2D: np.ndarray):
-        random_indices = self.rng.choice(train_y.shape[0], int(
+        random_indices = np.random.choice(train_y.shape[0], int(
             percentage/100 * train_y.shape[0]), replace=False)
 
         train_x_2D = train_x_2D[random_indices]
-        train_y = train_y[random_indices]
+        train_y = train_y[random_indices]   
 
         return train_x_2D, train_y
 
@@ -104,13 +100,35 @@ class Model(object):
         :param train_x_2D: Training features as a 2d NumPy float array of shape (NUM_SAMPLES, 2)
         :param train_y: Training pollution concentrations as a 1d NumPy float array of shape (NUM_SAMPLES,)
         """
-        # Take a random subset of the training data
         print('\n Taking a random subset of the training data \n')
-        percentage = 1
+        percentage = 100
         train_x_2D, train_y = self.few_percent(percentage, train_y, train_x_2D)
 
         print(f'\n ----- Fitting the GP with {percentage}%-------\n')
-        self.gp.fit(train_x_2D, train_y)
+        # Define a range of length scales and degrees of freedom (nu) for Matérn kernels
+        nu_values = 0.5 * np.arange(1, 6)
+        length_scales = 0.1 * np.arange(1, 6)
+
+        # Create a parameter grid to search through
+        param_grid = {
+            'kernel': [Matern(length_scale=l, nu=nu) for l in length_scales for nu in nu_values],
+            'n_restarts_optimizer': [0]
+        }
+
+        # Grid search with 5-fold cross-validation
+        grid_search = GridSearchCV(self.gp, param_grid, cv=5, scoring='neg_mean_squared_error')
+        
+        # Fit grid search
+        grid_search.fit(train_x_2D, train_y)
+
+        # Extract the best hyperparameters and corresponding model
+        best_hyperparameters = grid_search.best_params_
+        best_model = grid_search.best_estimator_
+        
+        self.gp = best_model
+        
+        print("\n ----------- GP has been fitted with the best hyperparameters: ", best_hyperparameters)
+
 
 
 # You don't have to change this function
@@ -130,7 +148,8 @@ def cost_function(ground_truth: np.ndarray, predictions: np.ndarray, AREA_idxs: 
     weights = np.ones_like(cost) * COST_W_NORMAL
 
     # Case i): underprediction
-    mask = (predictions < ground_truth) & [bool(AREA_idx) for AREA_idx in AREA_idxs]
+    mask = (predictions < ground_truth) & [
+        bool(AREA_idx) for AREA_idx in AREA_idxs]
     weights[mask] = COST_W_UNDERPREDICT
 
     # Weigh the cost and return the average
@@ -258,7 +277,7 @@ def main():
     # Fit the model
     print('Fitting model')
     model = Model()
-    model.fitting_model(train_y,train_x_2D)
+    model.fitting_model(train_y, train_x_2D)
 
     # Predict on the test features
     print('Predicting on test features')
@@ -267,6 +286,7 @@ def main():
 
     if EXTENDED_EVALUATION:
         perform_extended_evaluation(model, output_dir='.')
+
 
 if __name__ == "__main__":
     main()

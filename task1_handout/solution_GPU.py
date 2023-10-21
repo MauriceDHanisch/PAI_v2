@@ -1,18 +1,12 @@
 import os
 import typing
-from datetime import datetime, timedelta
-import numpy as np
-import matplotlib.pyplot as plt
-
 from sklearn.gaussian_process.kernels import *
+import numpy as np
 from sklearn.gaussian_process import GaussianProcessRegressor
-
-from scipy.optimize import fmin_l_bfgs_b
-
 from sklearn.kernel_approximation import Nystroem
-from sklearn.gaussian_process.kernels import Matern
-from sklearn.model_selection import GridSearchCV
-
+import matplotlib.pyplot as plt
+from matplotlib import cm
+# os.chdir('C:\\Users\\MOUms\\VS Projects\\PAI_v2\\task1_handout')
 
 # Set `EXTENDED_EVALUATION` to `True` in order to visualize your predictions.
 EXTENDED_EVALUATION = False
@@ -22,6 +16,21 @@ EVALUATION_GRID_POINTS = 300  # Number of grid points used in extended evaluatio
 COST_W_UNDERPREDICT = 50.0
 COST_W_NORMAL = 1.0
 
+import torch
+from torch.utils.data import DataLoader, TensorDataset
+import gpytorch
+
+class GPRegressionModel(gpytorch.models.ExactGP):
+    def __init__(self, train_x_tensor, train_y_tensor, likelihood):
+        super(GPRegressionModel, self).__init__(train_x_tensor, train_y_tensor, likelihood)
+        self.mean_module = gpytorch.means.ConstantMean()
+        self.covar_module = gpytorch.kernels.ScaleKernel(gpytorch.kernels.RBFKernel())
+
+    def forward(self, x):
+        mean_x = self.mean_module(x)
+        covar_x = self.covar_module(x)
+        return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
+
 
 class Model(object):
     """
@@ -30,87 +39,75 @@ class Model(object):
     without changing their signatures, but are allowed to create additional methods.
     """
 
-    def __init__(self):
+    def __init__(self, train_x, train_y):
         """
         Initialize your model here.
         We already provide a random number generator for reproducibility.
         """
         self.rng = np.random.default_rng(seed=0)
+        #self.gp = None
+        self.likelihood = gpytorch.likelihoods.GaussianLikelihood()
+        self.gp = GPRegressionModel(train_x, train_y, self.likelihood)
 
-        # Use the generator to produce an integer seed
-        seed = self.rng.integers(low=0, high=4294967295)
-
-        n_restart = 0
-        print("\n Setting model with n_restart = ", n_restart)
-        
-        # Setting up Matern Kernel with CV optimized length_scale and nu        
-        matern_kernel = Matern(length_scale=0.0174, nu=0.5, length_scale_bounds=(1e-3, 1e2)) # nu - 1 times differentiable
-
-        self.gp = GaussianProcessRegressor(
-            kernel=matern_kernel, n_restarts_optimizer=n_restart,
-            optimizer=self.custom_optimizer, random_state=seed)
-
-    def custom_optimizer(self, obj_func, initial_theta, bounds):
-        max_iterations = 100
-        current_iteration = [0]
-
-        def callback(xk):
-            current_iteration[0] += 1
-            current_loss = obj_func(xk)
-            timestamp = (datetime.now() + timedelta(hours=2)).strftime("%H:%M:%S")
-            print(
-                f"{timestamp} Iter {current_iteration[0]}/{max_iterations}. Curr params [log(lengthscale)]: {xk}, neg llh: {current_loss[0]}")
-
-        opt_res = fmin_l_bfgs_b(
-            obj_func, initial_theta, bounds=bounds,
-            callback=callback, maxiter=max_iterations
-        )
-        theta_opt, func_min, _ = opt_res
-        return theta_opt, func_min
+        # TODO: Add custom initialization for your model here if necessary
 
     def make_predictions(self, test_x_2D: np.ndarray, test_x_AREA: np.ndarray) -> typing.Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """
-        Predict the pollution concentration for a given set of city_areas.
-        :param test_x_2D: city_areas as a 2d NumPy float array of shape (NUM_SAMPLES, 2)
-        :param test_x_AREA: city_area info for every sample in a form of a bool array (NUM_SAMPLES,)
-        :return:
-            Tuple of three 1d NumPy float arrays, each of shape (NUM_SAMPLES,),
-            containing your predictions, the GP posterior mean, and the GP posterior stddev (in that order)
-        """
+    # Set device and model to evaluation mode
+        device = torch.device("mps")
+        self.gp.eval()
+        self.gp.likelihood.eval()
 
-        # TODO: Use your GP to estimate the posterior mean and stddev for each city_area here
-        gp_mean = np.zeros(test_x_2D.shape[0], dtype=float)
-        gp_std = np.zeros(test_x_2D.shape[0], dtype=float)
+        # Convert test data to PyTorch tensors and move to device
+        test_x_tensor = torch.tensor(test_x_2D, dtype=torch.float32).to(device)
+        test_x_AREA_tensor = torch.tensor(test_x_AREA, dtype=torch.bool).to(device)
 
-        gp_mean, gp_std = self.gpr.predict(test_x_2D, return_std=True)    
+        # Make predictions
+        with torch.no_grad(), gpytorch.settings.fast_pred_var():
+            observed_pred = self.gp.likelihood(self.gp(test_x_tensor))
+            gp_mean = observed_pred.mean
+            gp_std = observed_pred.stddev
 
-        # TODO: Use the GP posterior to form your predictions here
-        predictions = gp_mean + np.where(test_x_AREA, gp_std, 0)
+        # Convert predictions back to numpy
+        gp_mean = gp_mean.cpu().numpy()
+        gp_std = gp_std.cpu().numpy()
+
+        # Apply adjustment based on test_x_AREA
+        adjustment = np.where(test_x_AREA, gp_std, 0)
+        predictions = gp_mean + adjustment
 
         return predictions, gp_mean, gp_std
+
     
-    def few_percent(self, percentage, train_y: np.ndarray, train_x_2D: np.ndarray):
-        random_indices = self.rng.choice(train_y.shape[0], int(
-            percentage/100 * train_y.shape[0]), replace=False)
 
-        train_x_2D = train_x_2D[random_indices]
-        train_y = train_y[random_indices]
+    def fitting_model(self, train_y_tensor, train_x_tensor):
+        
+        train_dataset = TensorDataset(train_x_tensor, train_y_tensor)
+        trainloader = DataLoader(train_dataset, batch_size=64, shuffle=True, num_workers=4)
 
-        return train_x_2D, train_y
+        device = torch.device("mps")
+        print(f"Using device: {device}")
 
-    def fitting_model(self, train_y: np.ndarray, train_x_2D: np.ndarray):
-        """
-        Fit your model on the given training data.
-        :param train_x_2D: Training features as a 2d NumPy float array of shape (NUM_SAMPLES, 2)
-        :param train_y: Training pollution concentrations as a 1d NumPy float array of shape (NUM_SAMPLES,)
-        """
-        # Take a random subset of the training data
-        print('\n Taking a random subset of the training data \n')
-        percentage = 1
-        train_x_2D, train_y = self.few_percent(percentage, train_y, train_x_2D)
+        self.gp.to(device)
+        self.likelihood.to(device)
 
-        print(f'\n ----- Fitting the GP with {percentage}%-------\n')
-        self.gp.fit(train_x_2D, train_y)
+        self.gp.train()
+        self.likelihood.train()
+
+        optimizer = torch.optim.Adam(self.gp.parameters(), lr=0.1)
+        mll = gpytorch.mlls.ExactMarginalLogLikelihood(self.likelihood, self.gp)
+        
+        n_epochs = 50
+
+        for epoch in range(n_epochs):
+            for batch_idx, (data, target) in enumerate(trainloader):
+                data, target = data.to(device), target.to(device)
+                optimizer.zero_grad()
+                output = self.gp(data)
+                loss = -mll(output, target)
+                loss.backward()
+                print(f"Iter {epoch + 1}/{n_epochs} - Loss: {loss.item()}")
+                optimizer.step()
+
 
 
 # You don't have to change this function
@@ -130,7 +127,8 @@ def cost_function(ground_truth: np.ndarray, predictions: np.ndarray, AREA_idxs: 
     weights = np.ones_like(cost) * COST_W_NORMAL
 
     # Case i): underprediction
-    mask = (predictions < ground_truth) & [bool(AREA_idx) for AREA_idx in AREA_idxs]
+    mask = (predictions < ground_truth) & [
+        bool(AREA_idx) for AREA_idx in AREA_idxs]
     weights[mask] = COST_W_UNDERPREDICT
 
     # Weigh the cost and return the average
@@ -147,8 +145,9 @@ def is_in_circle(coor, circle_coor):
     """
     return (coor[0] - circle_coor[0])**2 + (coor[1] - circle_coor[1])**2 < circle_coor[2]**2
 
-
 # You don't have to change this function
+
+
 def determine_city_area_idx(visualization_xs_2D):
     """
     Determines the city_area index for each coordinate in the visualization grid.
@@ -244,21 +243,35 @@ def extract_city_area_information(train_x: np.ndarray, test_x: np.ndarray) -> ty
 
     return train_x_2D, train_x_AREA, test_x_2D, test_x_AREA
 
-
 # you don't have to change this function
+
+
 def main():
     # Load the training dateset and test features
+    print('Loading data')
     train_x = np.loadtxt('train_x.csv', delimiter=',', skiprows=1)
     train_y = np.loadtxt('train_y.csv', delimiter=',', skiprows=1)
     test_x = np.loadtxt('test_x.csv', delimiter=',', skiprows=1)
 
+    # Take a random subset of the training data
+    print('Taking a random subset of the training data')
+    percentage = 1
+    random_indices = np.random.choice(train_y.shape[0], int(
+        percentage/100 * train_y.shape[0]), replace=False)
+    train_x = train_x[random_indices]
+    train_y = train_y[random_indices]
+
     # Extract the city_area information
     train_x_2D, train_x_AREA, test_x_2D, test_x_AREA = extract_city_area_information(
         train_x, test_x)
+    
+    train_x_tensor = torch.tensor(train_x_2D, dtype=torch.float32)
+    train_y_tensor = torch.tensor(train_y, dtype=torch.float32)
+
     # Fit the model
     print('Fitting model')
-    model = Model()
-    model.fitting_model(train_y,train_x_2D)
+    model = Model(train_x_tensor, train_y_tensor)
+    model.fitting_model(train_y_tensor, train_x_tensor)
 
     # Predict on the test features
     print('Predicting on test features')
@@ -267,6 +280,7 @@ def main():
 
     if EXTENDED_EVALUATION:
         perform_extended_evaluation(model, output_dir='.')
+
 
 if __name__ == "__main__":
     main()

@@ -10,7 +10,7 @@ from sklearn.gaussian_process import GaussianProcessRegressor
 from scipy.optimize import fmin_l_bfgs_b
 
 from sklearn.kernel_approximation import Nystroem
-from sklearn.gaussian_process.kernels import Matern
+from sklearn.gaussian_process.kernels import RBF, Matern, RationalQuadratic, ExpSineSquared, WhiteKernel
 from sklearn.model_selection import GridSearchCV
 
 
@@ -36,15 +36,25 @@ class Model(object):
         We already provide a random number generator for reproducibility.
         """
         self.rng = np.random.default_rng(seed=0)
-
         # Use the generator to produce an integer seed
         seed = self.rng.integers(low=0, high=4294967295)
 
         n_restart = 0
         print("\n Setting model with n_restart = ", n_restart)
-        
-        # Setting up Matern Kernel with CV optimized length_scale and nu        
-        matern_kernel = Matern(length_scale=0.0174, nu=0.5, length_scale_bounds=(1e-3, 1e2)) # nu - 1 times differentiable
+
+        # Setting up different kernels to test
+        rbf_kernel = RBF(length_scale=0.1)
+        # nu - 1 times differentiable
+        matern_kernel = Matern(length_scale=0.1, nu=1)
+        rational_quadratic_kernel = 1.0 * \
+            RationalQuadratic(length_scale=1.0, alpha=1.0)
+        # Useful for capturing different scales of
+        # variation, e.g., near industrial areas vs
+        # residential areas.
+        periodic_kernel = 1.0 * ExpSineSquared(length_scale=1.0, periodicity=3.0,
+                                               length_scale_bounds=(0.1, 10.0), periodicity_bounds=(1.0, 10.0))
+        white_noise_kernel = WhiteKernel(noise_level=1, noise_level_bounds=(1e-10, 1e+1))
+
 
         self.gp = GaussianProcessRegressor(
             kernel=matern_kernel, n_restarts_optimizer=n_restart,
@@ -57,9 +67,10 @@ class Model(object):
         def callback(xk):
             current_iteration[0] += 1
             current_loss = obj_func(xk)
-            timestamp = (datetime.now() + timedelta(hours=2)).strftime("%H:%M:%S")
+            timestamp = (datetime.now() + timedelta(hours=2)
+                         ).strftime("%H:%M:%S")
             print(
-                f"{timestamp} Iter {current_iteration[0]}/{max_iterations}. Curr params [log(lengthscale)]: {xk}, neg llh: {current_loss[0]}")
+                f"{timestamp} Iter {current_iteration[0]}/{max_iterations}. Curr params [.., prob length scale]: {xk}, neg llh: {current_loss[0]}")
 
         opt_res = fmin_l_bfgs_b(
             obj_func, initial_theta, bounds=bounds,
@@ -78,19 +89,14 @@ class Model(object):
             containing your predictions, the GP posterior mean, and the GP posterior stddev (in that order)
         """
 
-        # TODO: Use your GP to estimate the posterior mean and stddev for each city_area here
-        gp_mean = np.zeros(test_x_2D.shape[0], dtype=float)
-        gp_std = np.zeros(test_x_2D.shape[0], dtype=float)
-
-        gp_mean, gp_std = self.gpr.predict(test_x_2D, return_std=True)    
-
-        # TODO: Use the GP posterior to form your predictions here
-        predictions = gp_mean + np.where(test_x_AREA, gp_std, 0)
+        gp_mean, gp_std = self.gp.predict(test_x_2D, return_std=True)
+        adjustment = np.where(test_x_AREA, gp_std, 0)
+        predictions = gp_mean + adjustment
 
         return predictions, gp_mean, gp_std
-    
+
     def few_percent(self, percentage, train_y: np.ndarray, train_x_2D: np.ndarray):
-        random_indices = self.rng.choice(train_y.shape[0], int(
+        random_indices = np.random.choice(train_y.shape[0], int(
             percentage/100 * train_y.shape[0]), replace=False)
 
         train_x_2D = train_x_2D[random_indices]
@@ -106,7 +112,7 @@ class Model(object):
         """
         # Take a random subset of the training data
         print('\n Taking a random subset of the training data \n')
-        percentage = 1
+        percentage = 60
         train_x_2D, train_y = self.few_percent(percentage, train_y, train_x_2D)
 
         print(f'\n ----- Fitting the GP with {percentage}%-------\n')
@@ -130,7 +136,8 @@ def cost_function(ground_truth: np.ndarray, predictions: np.ndarray, AREA_idxs: 
     weights = np.ones_like(cost) * COST_W_NORMAL
 
     # Case i): underprediction
-    mask = (predictions < ground_truth) & [bool(AREA_idx) for AREA_idx in AREA_idxs]
+    mask = (predictions < ground_truth) & [
+        bool(AREA_idx) for AREA_idx in AREA_idxs]
     weights[mask] = COST_W_UNDERPREDICT
 
     # Weigh the cost and return the average
@@ -258,7 +265,7 @@ def main():
     # Fit the model
     print('Fitting model')
     model = Model()
-    model.fitting_model(train_y,train_x_2D)
+    model.fitting_model(train_y, train_x_2D)
 
     # Predict on the test features
     print('Predicting on test features')
@@ -267,6 +274,7 @@ def main():
 
     if EXTENDED_EVALUATION:
         perform_extended_evaluation(model, output_dir='.')
+
 
 if __name__ == "__main__":
     main()
