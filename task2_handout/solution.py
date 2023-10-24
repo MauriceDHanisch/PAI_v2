@@ -115,7 +115,7 @@ class SWAGInference(object):
         model_dir: pathlib.Path,
         # TODO(1): change inference_mode to InferenceMode.SWAG_DIAGONAL
         # TODO(2): change inference_mode to InferenceMode.SWAG_FULL
-        inference_mode: InferenceMode = InferenceMode.SWAG_DIAGONAL,
+        inference_mode: InferenceMode = InferenceMode.SWAG_FULL,
         # TODO(2): optionally add/tweak hyperparameters
         swag_epochs: int = 30,
         swag_learning_rate: float = 0.045,
@@ -152,7 +152,7 @@ class SWAGInference(object):
         # SWAG-diagonal
         self.mean = self._create_weight_copy()
         self.square_mean = self._create_weight_copy()
-        self.covariance = self._create_weight_copy()
+        self.diagonal = self._create_weight_copy()
         self.epoch = 0
         # TODO(1): create attributes for SWAG-diagonal
         #  Hint: self._create_weight_copy() creates an all-zero copy of the weights
@@ -163,6 +163,8 @@ class SWAGInference(object):
         # Full SWAG
         # TODO(2): create attributes for SWAG-diagonal
         #  Hint: check collections.deque
+        self.deviation_matrix = {name: collections.deque(
+            maxlen=self.deviation_matrix_max_rank) for name, param in self.network.named_parameters()}
 
         # Calibration, prediction, and other attributes
         # TODO(2): create additional attributes, e.g., for calibration
@@ -183,7 +185,7 @@ class SWAGInference(object):
                                self.epoch + param) / (self.epoch + 1)
             self.square_mean[name] = (
                 self.square_mean[name] * self.epoch + param ** 2) / (self.epoch + 1)
-            self.covariance[name] = self.square_mean[name] - \
+            self.diagonal[name] = self.square_mean[name] - \
                 self.mean[name] ** 2
             # TODO(1): update SWAG-diagonal attributes for weight `name` using `current_params` and `param`
             # raise NotImplementedError("Update SWAG-diagonal statistics")
@@ -191,7 +193,8 @@ class SWAGInference(object):
         # Full SWAG
         if self.inference_mode == InferenceMode.SWAG_FULL:
             # TODO(2): update full SWAG attributes for weight `name` using `current_params` and `param`
-            raise NotImplementedError("Update full SWAG statistics")
+            # raise NotImplementedError("Update full SWAG statistics")
+            self.deviation_matrix[name].append(param[name] - self.mean[name])
 
         self.epoch += 1
 
@@ -341,7 +344,7 @@ class SWAGInference(object):
             # TODO(1): Sample parameter values for SWAG-diagonal
             # raise NotImplementedError("Sample parameter for SWAG-diagonal")
             current_mean = self.mean[name]
-            current_std = self.covariance[name].sqrt()
+            current_std = (self.diagonal[name]/2).sqrt()
             assert current_mean.size() == param.size() and current_std.size() == param.size()
 
             # Diagonal part
@@ -350,8 +353,10 @@ class SWAGInference(object):
             # Full SWAG part
             if self.inference_mode == InferenceMode.SWAG_FULL:
                 # TODO(2): Sample parameter values for full SWAG
-                raise NotImplementedError("Sample parameter for full SWAG")
-                sampled_param += ...
+                # raise NotImplementedError("Sample parameter for full SWAG")
+                z_2 = torch.randn(param.size())
+                sampled_param += np.array(self.deviation_matrix[name]).T @ z_2/np.sqrt(
+                    2*(self.deviation_matrix_max_rank-1))
 
             # Modify weight value in-place; directly changing self.network
             param.data = sampled_param
