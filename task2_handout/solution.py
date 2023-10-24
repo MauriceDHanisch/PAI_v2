@@ -190,11 +190,11 @@ class SWAGInference(object):
             # TODO(1): update SWAG-diagonal attributes for weight `name` using `current_params` and `param`
             # raise NotImplementedError("Update SWAG-diagonal statistics")
 
-        # Full SWAG
-        if self.inference_mode == InferenceMode.SWAG_FULL:
-            # TODO(2): update full SWAG attributes for weight `name` using `current_params` and `param`
-            # raise NotImplementedError("Update full SWAG statistics")
-            self.deviation_matrix[name].append(param[name] - self.mean[name])
+            # Full SWAG
+            if self.inference_mode == InferenceMode.SWAG_FULL:
+                # TODO(2): update full SWAG attributes for weight `name` using `current_params` and `param`
+                # raise NotImplementedError("Update full SWAG statistics")
+                self.deviation_matrix[name].append(param - self.mean[name])
 
         self.epoch += 1
 
@@ -354,9 +354,9 @@ class SWAGInference(object):
             if self.inference_mode == InferenceMode.SWAG_FULL:
                 # TODO(2): Sample parameter values for full SWAG
                 # raise NotImplementedError("Sample parameter for full SWAG")
-                z_2 = torch.randn(param.size())
-                sampled_param += np.array(self.deviation_matrix[name]).T @ z_2/np.sqrt(
-                    2*(self.deviation_matrix_max_rank-1))
+                z_2 = torch.randn(len(self.deviation_matrix[name]))
+                sampled_param += torch.tensor(sum([z_2[i]*torch.tensor(np.array(self.deviation_matrix[name]))[i]/np.sqrt(
+                    2*(self.deviation_matrix_max_rank-1)) for i in range(z_2.size()[0])]))
 
             # Modify weight value in-place; directly changing self.network
             param.data = sampled_param
