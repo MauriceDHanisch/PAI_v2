@@ -324,8 +324,9 @@ class SWAGInference(object):
 
         # TODO(1): Average predictions from different model samples into bma_probabilities
         # raise NotImplementedError("Aggregate predictions from model samples")
-        bma_probabilities = torch.stack(
-            per_model_sample_predictions).mean(dim=0)
+        # bma_probabilities = torch.stack(
+        #    per_model_sample_predictions).mean(dim=0)
+        bma_probabilities = sum(per_model_sample_predictions)/self.bma_samples
 
         assert bma_probabilities.dim() == 2 and bma_probabilities.size(1) == 6  # N x C
         return bma_probabilities
