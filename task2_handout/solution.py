@@ -30,14 +30,7 @@ Note that MAP inference can take a long time.
 """
 
 
-def main():
-    raise RuntimeError(
-        "This main() method is for illustrative purposes only"
-        " and will NEVER be called when running your solution to generate your submission file!\n"
-        "The checker always directly interacts with your SWAGInference class and evaluate method.\n"
-        "You can remove this exception for local testing, but be aware that any changes to the main() method"
-        " are ignored when generating your submission file."
-    )
+def main():   
 
     data_dir = pathlib.Path.cwd()
     model_dir = pathlib.Path.cwd()
@@ -146,7 +139,7 @@ class SWAGInference(object):
 
         # Store training dataset to recalculate batch normalization statistics during SWAG inference
         self.train_dataset = torch.utils.data.TensorDataset(train_xs)
-
+        
         # SWAG-diagonal
         # TODO(1): DONE create attributes for SWAG-diagonal
         #  Hint: self._create_weight_copy() creates an all-zero copy of the weights
@@ -305,10 +298,11 @@ class SWAGInference(object):
             #  and add the predictions to per_model_sample_predictions
             with torch.no_grad():  # No gradient for inference
                 model_sample_predictions = []
-                for inputs, _ in loader:
-                    outputs = self.network(inputs)
+                for inputs in loader:  # Only one item to unpack because we are in inference mode
+                    outputs = self.network(inputs[0])  # inputs is a tuple, and inputs[0] is the actual tensor
                     probabilities = torch.softmax(outputs, dim=1)  # Convert outputs to probabilities
                     model_sample_predictions.append(probabilities)
+
 
             # Concatenate predictions for all batches
             model_sample_predictions = torch.cat(model_sample_predictions, dim=0)
