@@ -20,3 +20,6 @@ ipykernel = "*"
 [requires]
 python_version = "3.9"
 python_full_version = "3.9.1"
+
+[pipenv]
+allow_prereleases = true
