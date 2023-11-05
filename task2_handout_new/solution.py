@@ -360,8 +360,13 @@ class SWAGInference(object):
                 # TODO(2): Sample parameter values for full SWAG
                 # raise NotImplementedError("Sample parameter for full SWAG")
                 z_2 = torch.randn(len(self.deviation_matrix[name]))
-                term = sum([z_2[i]*self.deviation_matrix[name][i]/np.sqrt(
-                    2*(self.deviation_matrix_max_rank-1)) for i in range(z_2.size()[0])])
+                deviation_matrix_tensor = torch.stack(
+                    self.deviation_matrix[name])
+
+                term = deviation_matrix_tensor @ z_2/np.sqrt(
+                    2*(self.deviation_matrix_max_rank-1))
+                # term = sum([z_2[i]*self.deviation_matrix[name][i]/np.sqrt(
+                #     2*(self.deviation_matrix_max_rank-1)) for i in range(z_2.size()[0])])
                 assert term.size() == param.size()
                 sampled_param += term
 
