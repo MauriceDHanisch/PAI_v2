@@ -187,7 +187,7 @@ class SWAGInference(object):
             deviation = {name: (param - self.mean[name]).detach()
                          for name, param in current_params.items()}
 
-            # Update the diagonal part of the covariance
+            """# Update the diagonal part of the covariance
             for name, dev in deviation.items():
                 self.diagonal[name] += dev.pow(2)
 
@@ -198,10 +198,10 @@ class SWAGInference(object):
 
                 for name, dev in oldest_deviation.items():
                     # Remove the oldest deviation from the diagonal
-                    self.diagonal[name] -= dev.pow(2)
+                    self.diagonal[name] -= dev.pow(2)"""
 
             # Add the new deviation
-            self.deviations.appendleft(deviation)
+            self.deviations.append(deviation)
 
     def fit_swag(self, loader: torch.utils.data.DataLoader) -> None:
         """
@@ -364,7 +364,8 @@ class SWAGInference(object):
             assert current_mean.size() == param.size() and current_std.size() == param.size()
 
             # Diagonal part
-            sampled_param = current_mean + current_std * z_1  # mean + std * Gaussian
+            sampled_param = current_mean + current_std * \
+                z_1/np.sqrt(2)  # mean + std * Gaussian
 
             # Full SWAG part
             if self.inference_mode == InferenceMode.SWAG_FULL:
@@ -374,7 +375,8 @@ class SWAGInference(object):
                     [dev[name].flatten() for dev in self.deviations])
                 z_2 = torch.randn(cov_mat_sqrt.size(0), device=param.device)
                 # Low-rank update from the decomposed cov matrix
-                rank_update = cov_mat_sqrt.t().matmul(z_2)
+                rank_update = cov_mat_sqrt.t().matmul(
+                    z_2)/np.sqrt(2*(self.deviation_matrix_max_rank-1))
 
                 # Reshape the update to the shape of the parameters
                 rank_update = rank_update.view(param.size())
