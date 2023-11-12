@@ -30,14 +30,7 @@ Note that MAP inference can take a long time.
 """
 
 
-def main():
-    # raise RuntimeError(
-    #     "This main() method is for illustrative purposes only"
-    #     " and will NEVER be called when running your solution to generate your submission file!\n"
-    #     "The checker always directly interacts with your SWAGInference class and evaluate method.\n"
-    #     "You can remove this exception for local testing, but be aware that any changes to the main() method"
-    #     " are ignored when generating your submission file."
-    # )
+def main():   
 
     data_dir = pathlib.Path.cwd()
     model_dir = pathlib.Path.cwd()
@@ -84,7 +77,6 @@ def main():
         evaluate(swag, dataset_val, EXTENDED_EVALUATION, output_dir)
 
 
-
 class InferenceMode(enum.Enum):
     """
     Inference mode switch for your implementation.
@@ -112,11 +104,11 @@ class SWAGInference(object):
         self,
         train_xs: torch.Tensor,
         model_dir: pathlib.Path,
-        inference_mode: InferenceMode = InferenceMode.SWAG_Full,
+        inference_mode: InferenceMode = InferenceMode.SWAG_FULL,
         # TODO(2): optionally add/tweak hyperparameters
         swag_epochs: int = 30,
         swag_learning_rate: float = 0.045,
-        swag_update_freq: int = 1,
+        swag_update_freq: int = 30,
         deviation_matrix_max_rank: int = 15,
         bma_samples: int = 30,
     ):
@@ -139,17 +131,12 @@ class SWAGInference(object):
         self.deviation_matrix_max_rank = deviation_matrix_max_rank
         self.bma_samples = bma_samples
 
-        # Set the device to MPS if available
-        device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-        self.device = device
-        print(f"Using device: {device}")
-
         # Network used to perform SWAG.
         # Note that all operations in this class modify this network IN-PLACE!
-        self.network = CNN(in_channels=3, out_classes=6).to(self.device)
+        self.network = CNN(in_channels=3, out_classes=6)
 
         # Store training dataset to recalculate batch normalization statistics during SWAG inference
-        self.train_dataset = torch.utils.data.TensorDataset(train_xs.to(self.device))
+        self.train_dataset = torch.utils.data.TensorDataset(train_xs)
         
         # SWAG-diagonal
         self.mean = self._create_weight_copy()
@@ -239,9 +226,6 @@ class SWAGInference(object):
                 average_accuracy = 0.0
                 num_samples_processed = 0
                 for batch_xs, batch_is_snow, batch_is_cloud, batch_ys in loader:
-
-                    batch_xs, batch_ys = batch_xs.to(self.device), batch_ys.to(self.device) # Move to device
-
                     optimizer.zero_grad()
                     pred_ys = self.network(batch_xs)
                     batch_loss = loss(input=pred_ys, target=batch_ys)
@@ -310,12 +294,7 @@ class SWAGInference(object):
             with torch.no_grad():  # No gradient for inference
                 model_sample_predictions = []
                 for inputs in loader:  # Only one item to unpack because we are in inference mode
-
-                    inputs = inputs[0].unsqueeze(0).to(self.device) if inputs[0].dim() == 3 else inputs[0].to(self.device)
-
-
-
-                    outputs = self.network(inputs)  # inputs is a tuple, and inputs[0] is the actual tensor
+                    outputs = self.network(inputs[0])  # inputs is a tuple, and inputs[0] is the actual tensor
                     
                     #print("Outputs before softmax:", outputs)                    
                     probabilities = torch.softmax(outputs, dim=1)  # Convert outputs to probabilities
@@ -354,10 +333,10 @@ class SWAGInference(object):
         # Instead of acting on a full vector of parameters, all operations can be done on per-layer parameters.
         for name, param in self.network.named_parameters():
             # SWAG-diagonal part
-            z_1 = torch.randn(param.size(), device=self.device)
+            z_1 = torch.randn(param.size())
             current_mean = self.mean[name]
             current_sq_mean = self.sq_mean[name]
-            current_std = torch.sqrt(current_sq_mean - current_mean**2).to(self.device)
+            current_std = torch.sqrt(current_sq_mean - current_mean**2)
             assert current_mean.size() == param.size() and current_std.size() == param.size()
 
             # Sample the diagonal part
@@ -366,16 +345,16 @@ class SWAGInference(object):
             # Full SWAG part
             if self.inference_mode == InferenceMode.SWAG_FULL:
                 # Flatten the deviations and ensure they are 2D before transposing
-                flattened_deviations = torch.stack([dev[name].flatten() for dev in self.deviations]).to(self.device)
+                flattened_deviations = torch.stack([dev[name].flatten() for dev in self.deviations])
                 # Ensure it's 2D for matrix multiplication
                 if flattened_deviations.dim() == 1:
                     flattened_deviations = flattened_deviations.unsqueeze(0)
-                z_2 = torch.randn(flattened_deviations.size(0), device=self.device)
+                z_2 = torch.randn(flattened_deviations.size(0), device=param.device)
                 # Perform the matrix multiplication with proper scaling
                 scaling_factor = 2.0 * (len(self.deviations) - 1)
                 if scaling_factor <= 0:
                     raise ValueError("Scaling factor for low-rank update must be positive")
-                low_rank_update = (flattened_deviations.t().matmul(z_2)) / torch.sqrt(torch.tensor(scaling_factor, device=self.device))
+                low_rank_update = (flattened_deviations.t().matmul(z_2)) / torch.sqrt(torch.tensor(scaling_factor, device=param.device))
 
                 # Reshape to the parameter's shape and update
                 sampled_param += low_rank_update.view(param.size())
@@ -413,7 +392,7 @@ class SWAGInference(object):
     def _create_weight_copy(self) -> typing.Dict[str, torch.Tensor]:
         """Create an all-zero copy of the network weights as a dictionary that maps name -> weight"""
         return {
-            name: torch.zeros_like(param, requires_grad=False).to(self.device)
+            name: torch.zeros_like(param, requires_grad=False)
             for name, param in self.network.named_parameters()
         }
 
@@ -663,10 +642,6 @@ def evaluate(
 
     print("Evaluating model on validation data")
 
-    #device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-    device = "cpu"
-    print(f"Evaluating using device: {device}")
-
     # We ignore is_snow and is_cloud here, but feel free to use them as well
     xs, is_snow, is_cloud, ys = eval_dataset.tensors
 
@@ -679,14 +654,6 @@ def evaluate(
 
     # Create a mask that ignores ambiguous samples (those with class -1)
     nonambiguous_mask = ys != -1
-
-    # Move tensors to MPS for GPU acceleration on Apple Silicon
-    pred_ys = pred_ys.to(device)
-    pred_prob_all = pred_prob_all.to(device)
-    pred_prob_max = pred_prob_max.to(device)
-    pred_ys_argmax = pred_ys_argmax.to(device)
-    xs = xs.to(device)
-    ys = ys.to(device)
 
     # Calculate three kinds of accuracy:
     # 1. Overall accuracy, counting "don't know" (-1) as its own class
@@ -714,9 +681,7 @@ def evaluate(
     print("Note that this threshold does not necessarily generalize to the test set!")
 
     # Calculate ECE and plot the calibration curve
-    pred_prob_all = pred_prob_all.to('cpu')
-    ys = ys.to('cpu')  # Assuming ys is not already on the CPU
-    calibration_data = calc_calibration_curve(pred_prob_all.cpu().numpy(), ys.cpu().numpy(), num_bins=20)
+    calibration_data = calc_calibration_curve(pred_prob_all.numpy(), ys.numpy(), num_bins=20)
     print("Validation ECE:", calibration_data["ece"])
 
     if extended_evaluation:
