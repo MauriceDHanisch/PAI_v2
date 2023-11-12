@@ -112,9 +112,9 @@ class SWAGInference(object):
         self,
         train_xs: torch.Tensor,
         model_dir: pathlib.Path,
-        inference_mode: InferenceMode = InferenceMode.SWAG_Full,
+        inference_mode: InferenceMode = InferenceMode.SWAG_DIAGONAL,
         # TODO(2): optionally add/tweak hyperparameters
-        swag_epochs: int = 30,
+        swag_epochs: int = 100,
         swag_learning_rate: float = 0.045,
         swag_update_freq: int = 1,
         deviation_matrix_max_rank: int = 15,
@@ -143,6 +143,8 @@ class SWAGInference(object):
         device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
         self.device = device
         print(f"Using device: {device}")
+
+        print(f"Using parameters: {self.__dict__}")
 
         # Network used to perform SWAG.
         # Note that all operations in this class modify this network IN-PLACE!
@@ -621,8 +623,12 @@ class SWAGScheduler(torch.optim.lr_scheduler.LRScheduler):
 
         This method should return a single float: the new learning rate.
         """
-        # TODO(2): Implement a custom schedule if desired
-        return old_lr
+        max_epoch = self.epochs * self.steps_per_epoch
+        current_step = current_epoch * self.steps_per_epoch
+        cosine = 0.5 * (1 + math.cos(math.pi * current_step / max_epoch))
+        new_lr = self.min_lr + (old_lr - self.min_lr) * cosine
+        return new_lr
+
 
     # TODO(2): Add and store additional arguments if you decide to implement a custom scheduler
     def __init__(
@@ -630,9 +636,11 @@ class SWAGScheduler(torch.optim.lr_scheduler.LRScheduler):
         optimizer: torch.optim.Optimizer,
         epochs: int,
         steps_per_epoch: int,
+        min_lr=1e-6,
     ):
         self.epochs = epochs
         self.steps_per_epoch = steps_per_epoch
+        self.min_lr = min_lr
         super().__init__(optimizer, last_epoch=-1, verbose=False)
 
     def get_lr(self):
