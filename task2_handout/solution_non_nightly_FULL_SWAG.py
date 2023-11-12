@@ -31,28 +31,25 @@ Note that MAP inference can take a long time.
 
 
 def main():   
-    # Set the device to MPS if available
-    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-    print(f"Using device: {device}")
 
     data_dir = pathlib.Path.cwd()
     model_dir = pathlib.Path.cwd()
     output_dir = pathlib.Path.cwd()
 
     # Load training data
-    train_xs = torch.from_numpy(np.load(data_dir / "train_xs.npz")["train_xs"]).to(device)
+    train_xs = torch.from_numpy(np.load(data_dir / "train_xs.npz")["train_xs"])
     raw_train_meta = np.load(data_dir / "train_ys.npz")
-    train_ys = torch.from_numpy(raw_train_meta["train_ys"]).to(device)
-    train_is_snow = torch.from_numpy(raw_train_meta["train_is_snow"]).to(device)
-    train_is_cloud = torch.from_numpy(raw_train_meta["train_is_cloud"]).to(device)
+    train_ys = torch.from_numpy(raw_train_meta["train_ys"])
+    train_is_snow = torch.from_numpy(raw_train_meta["train_is_snow"])
+    train_is_cloud = torch.from_numpy(raw_train_meta["train_is_cloud"])
     dataset_train = torch.utils.data.TensorDataset(train_xs, train_is_snow, train_is_cloud, train_ys)
 
     # Load validation data
-    val_xs = torch.from_numpy(np.load(data_dir / "val_xs.npz")["val_xs"]).to(device)
+    val_xs = torch.from_numpy(np.load(data_dir / "val_xs.npz")["val_xs"])
     raw_val_meta = np.load(data_dir / "val_ys.npz")
-    val_ys = torch.from_numpy(raw_val_meta["val_ys"]).to(device)
-    val_is_snow = torch.from_numpy(raw_val_meta["val_is_snow"]).to(device)
-    val_is_cloud = torch.from_numpy(raw_val_meta["val_is_cloud"]).to(device)
+    val_ys = torch.from_numpy(raw_val_meta["val_ys"])
+    val_is_snow = torch.from_numpy(raw_val_meta["val_is_snow"])
+    val_is_cloud = torch.from_numpy(raw_val_meta["val_is_cloud"])
     dataset_val = torch.utils.data.TensorDataset(val_xs, val_is_snow, val_is_cloud, val_ys)
 
     # Fix all randomness
@@ -68,15 +65,16 @@ def main():
     swag = SWAGInference(
         train_xs=dataset_train.tensors[0],
         model_dir=model_dir,
-        device=device  # Pass the device to SWAGInference
     )
     swag.fit(train_loader)
     swag.calibrate(dataset_val)
 
     # fork_rng ensures that the evaluation does not change the rng state.
+    # That way, you should get exactly the same results even if you remove evaluation
+    # to save computational time when developing the task
+    # (as long as you ONLY use torch randomness, and not e.g. random or numpy.random).
     with torch.random.fork_rng():
         evaluate(swag, dataset_val, EXTENDED_EVALUATION, output_dir)
-
 
 
 class InferenceMode(enum.Enum):
@@ -104,14 +102,13 @@ class SWAGInference(object):
 
     def __init__(
         self,
-        device: torch.device,
         train_xs: torch.Tensor,
         model_dir: pathlib.Path,
         inference_mode: InferenceMode = InferenceMode.SWAG_FULL,
         # TODO(2): optionally add/tweak hyperparameters
         swag_epochs: int = 30,
         swag_learning_rate: float = 0.045,
-        swag_update_freq: int = 1,
+        swag_update_freq: int = 30,
         deviation_matrix_max_rank: int = 15,
         bma_samples: int = 30,
     ):
@@ -134,15 +131,12 @@ class SWAGInference(object):
         self.deviation_matrix_max_rank = deviation_matrix_max_rank
         self.bma_samples = bma_samples
 
-        # Set the device
-        self.device = device
-
         # Network used to perform SWAG.
         # Note that all operations in this class modify this network IN-PLACE!
-        self.network = CNN(in_channels=3, out_classes=6).to(self.device)
+        self.network = CNN(in_channels=3, out_classes=6)
 
         # Store training dataset to recalculate batch normalization statistics during SWAG inference
-        self.train_dataset = torch.utils.data.TensorDataset(train_xs.to(self.device))
+        self.train_dataset = torch.utils.data.TensorDataset(train_xs)
         
         # SWAG-diagonal
         self.mean = self._create_weight_copy()
@@ -232,9 +226,6 @@ class SWAGInference(object):
                 average_accuracy = 0.0
                 num_samples_processed = 0
                 for batch_xs, batch_is_snow, batch_is_cloud, batch_ys in loader:
-
-                    batch_xs, batch_ys = batch_xs.to(self.device), batch_ys.to(self.device) # Move to device
-
                     optimizer.zero_grad()
                     pred_ys = self.network(batch_xs)
                     batch_loss = loss(input=pred_ys, target=batch_ys)
@@ -303,12 +294,7 @@ class SWAGInference(object):
             with torch.no_grad():  # No gradient for inference
                 model_sample_predictions = []
                 for inputs in loader:  # Only one item to unpack because we are in inference mode
-
-                    inputs = inputs[0].unsqueeze(0).to(self.device) if inputs[0].dim() == 3 else inputs[0].to(self.device)
-
-
-
-                    outputs = self.network(inputs)  # inputs is a tuple, and inputs[0] is the actual tensor
+                    outputs = self.network(inputs[0])  # inputs is a tuple, and inputs[0] is the actual tensor
                     
                     #print("Outputs before softmax:", outputs)                    
                     probabilities = torch.softmax(outputs, dim=1)  # Convert outputs to probabilities
@@ -347,10 +333,10 @@ class SWAGInference(object):
         # Instead of acting on a full vector of parameters, all operations can be done on per-layer parameters.
         for name, param in self.network.named_parameters():
             # SWAG-diagonal part
-            z_1 = torch.randn(param.size(), device=self.device)
+            z_1 = torch.randn(param.size())
             current_mean = self.mean[name]
             current_sq_mean = self.sq_mean[name]
-            current_std = torch.sqrt(current_sq_mean - current_mean**2).to(self.device)
+            current_std = torch.sqrt(current_sq_mean - current_mean**2)
             assert current_mean.size() == param.size() and current_std.size() == param.size()
 
             # Sample the diagonal part
@@ -359,16 +345,16 @@ class SWAGInference(object):
             # Full SWAG part
             if self.inference_mode == InferenceMode.SWAG_FULL:
                 # Flatten the deviations and ensure they are 2D before transposing
-                flattened_deviations = torch.stack([dev[name].flatten() for dev in self.deviations]).to(self.device)
+                flattened_deviations = torch.stack([dev[name].flatten() for dev in self.deviations])
                 # Ensure it's 2D for matrix multiplication
                 if flattened_deviations.dim() == 1:
                     flattened_deviations = flattened_deviations.unsqueeze(0)
-                z_2 = torch.randn(flattened_deviations.size(0), device=self.device)
+                z_2 = torch.randn(flattened_deviations.size(0), device=param.device)
                 # Perform the matrix multiplication with proper scaling
                 scaling_factor = 2.0 * (len(self.deviations) - 1)
                 if scaling_factor <= 0:
                     raise ValueError("Scaling factor for low-rank update must be positive")
-                low_rank_update = (flattened_deviations.t().matmul(z_2)) / torch.sqrt(torch.tensor(scaling_factor, device=self.device))
+                low_rank_update = (flattened_deviations.t().matmul(z_2)) / torch.sqrt(torch.tensor(scaling_factor, device=param.device))
 
                 # Reshape to the parameter's shape and update
                 sampled_param += low_rank_update.view(param.size())
@@ -406,7 +392,7 @@ class SWAGInference(object):
     def _create_weight_copy(self) -> typing.Dict[str, torch.Tensor]:
         """Create an all-zero copy of the network weights as a dictionary that maps name -> weight"""
         return {
-            name: torch.zeros_like(param, requires_grad=False).to(self.device)
+            name: torch.zeros_like(param, requires_grad=False)
             for name, param in self.network.named_parameters()
         }
 
@@ -695,7 +681,7 @@ def evaluate(
     print("Note that this threshold does not necessarily generalize to the test set!")
 
     # Calculate ECE and plot the calibration curve
-    calibration_data = calc_calibration_curve(pred_prob_all.cpu().numpy(), ys.cpu().numpy(), num_bins=20)
+    calibration_data = calc_calibration_curve(pred_prob_all.numpy(), ys.numpy(), num_bins=20)
     print("Validation ECE:", calibration_data["ece"])
 
     if extended_evaluation:
