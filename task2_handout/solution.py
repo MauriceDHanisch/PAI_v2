@@ -60,7 +60,7 @@ def main():
         dataset_train,
         batch_size=16,
         shuffle=True,
-        num_workers=4,
+        num_workers=0,
     )
     swag = SWAGInference(
         train_xs=dataset_train.tensors[0],
@@ -108,7 +108,7 @@ class SWAGInference(object):
         # TODO(2): optionally add/tweak hyperparameters
         swag_epochs: int = 30,
         swag_learning_rate: float = 0.045,
-        swag_update_freq: int = 1,
+        swag_update_freq: int = 30,
         deviation_matrix_max_rank: int = 15,
         bma_samples: int = 30,
     ):
@@ -150,8 +150,6 @@ class SWAGInference(object):
         #  Hint: check collections.deque
         self.deviation_matrix_max_rank = deviation_matrix_max_rank
         self.deviations = collections.deque(maxlen=self.deviation_matrix_max_rank)
-        self.diagonal = self._create_weight_copy()  # This will store the diagonal variance
-
 
         # Calibration, prediction, and other attributes
         # TODO(2): create additional attributes, e.g., for calibration
@@ -181,21 +179,13 @@ class SWAGInference(object):
             # Compute the deviation from the mean
             deviation = {name: (param - self.mean[name]).detach() for name, param in current_params.items()}
 
-            # Update the diagonal part of the covariance
-            for name, dev in deviation.items():
-                self.diagonal[name] += dev.pow(2)
-
             # Update the low-rank part of the covariance
-            if len(self.deviations) == self.deviation_matrix_max_rank:
-                # Subtract the oldest deviation if we reached max capacity
-                oldest_deviation = self.deviations.pop()
-
-                for name, dev in oldest_deviation.items():
-                    # Remove the oldest deviation from the diagonal
-                    self.diagonal[name] -= dev.pow(2)
-
-            # Add the new deviation
-            self.deviations.appendleft(deviation)
+            if len(self.deviations) < self.deviation_matrix_max_rank:
+                self.deviations.appendleft(deviation)
+            else:
+                # If we reached max capacity, replace the oldest deviation
+                self.deviations.pop()
+                self.deviations.appendleft(deviation)
 
     def fit_swag(self, loader: torch.utils.data.DataLoader) -> None:
         """
@@ -306,17 +296,17 @@ class SWAGInference(object):
                 for inputs in loader:  # Only one item to unpack because we are in inference mode
                     outputs = self.network(inputs[0])  # inputs is a tuple, and inputs[0] is the actual tensor
                     
-                    print("Outputs before softmax:", outputs)                    
+                    #print("Outputs before softmax:", outputs)                    
                     probabilities = torch.softmax(outputs, dim=1)  # Convert outputs to probabilities
-                    print("Batch probabilities shape:", probabilities.shape)
-                    print("Batch probabilities sum per sample:", torch.sum(probabilities, dim=1))    
+                    #print("Batch probabilities shape:", probabilities.shape)
+                    #print("Batch probabilities sum per sample:", torch.sum(probabilities, dim=1))    
                     model_sample_predictions.append(probabilities)
 
 
             # Concatenate predictions for all batches
             model_sample_predictions = torch.cat(model_sample_predictions, dim=0)
-            print("Model sample predictions shape:", model_sample_predictions.shape)
-            print("Model sample predictions sum per sample:", torch.sum(model_sample_predictions, dim=1))
+            #print("Model sample predictions shape:", model_sample_predictions.shape)
+            #print("Model sample predictions sum per sample:", torch.sum(model_sample_predictions, dim=1))
             per_model_sample_predictions.append(model_sample_predictions)
 
         assert len(per_model_sample_predictions) == self.bma_samples
@@ -328,8 +318,8 @@ class SWAGInference(object):
         )
 
         bma_probabilities = torch.stack(per_model_sample_predictions).mean(dim=0)
-        print("BMA probabilities shape:", bma_probabilities.shape)
-        print("BMA probabilities sum per sample:", torch.sum(bma_probabilities, dim=1))
+        #print("BMA probabilities shape:", bma_probabilities.shape)
+        #print("BMA probabilities sum per sample:", torch.sum(bma_probabilities, dim=1))
         assert bma_probabilities.dim() == 2 and bma_probabilities.size(1) == 6  # N x C
         return bma_probabilities
 
@@ -349,25 +339,27 @@ class SWAGInference(object):
             current_std = torch.sqrt(current_sq_mean - current_mean**2)
             assert current_mean.size() == param.size() and current_std.size() == param.size()
 
-            # Diagonal part
-            sampled_param = current_mean + current_std * z_1 # mean + std * Gaussian
+            # Sample the diagonal part
+            sampled_param = current_mean + current_std * z_1
 
             # Full SWAG part
             if self.inference_mode == InferenceMode.SWAG_FULL:
-                # TODO(2): Sample parameter values for full SWAG
-                # Construct a low-rank Gaussian distribution
-                cov_mat_sqrt = torch.stack([dev[name].flatten() for dev in self.deviations])
-                z_2 = torch.randn(cov_mat_sqrt.size(0), device=param.device)
-                rank_update = cov_mat_sqrt.t().matmul(z_2)  # Low-rank update from the decomposed cov matrix
-                
-                # Reshape the update to the shape of the parameters
-                rank_update = rank_update.view(param.size())
-                
-                # Update the sampled parameters
-                sampled_param += rank_update
+                # Flatten the deviations and ensure they are 2D before transposing
+                flattened_deviations = torch.stack([dev[name].flatten() for dev in self.deviations])
+                # Ensure it's 2D for matrix multiplication
+                if flattened_deviations.dim() == 1:
+                    flattened_deviations = flattened_deviations.unsqueeze(0)
+                z_2 = torch.randn(flattened_deviations.size(0), device=param.device)
+                # Perform the matrix multiplication with proper scaling
+                scaling_factor = 2.0 * (len(self.deviations) - 1)
+                if scaling_factor <= 0:
+                    raise ValueError("Scaling factor for low-rank update must be positive")
+                low_rank_update = (flattened_deviations.t().matmul(z_2)) / torch.sqrt(torch.tensor(scaling_factor, device=param.device))
 
-            # Modify weight value in-place; directly changing self.network
-            param.data = sampled_param
+                # Reshape to the parameter's shape and update
+                sampled_param += low_rank_update.view(param.size())
+
+        param.data.copy_(sampled_param)  # Update the parameter in-place
 
         self._update_batchnorm()
 
@@ -522,7 +514,7 @@ class SWAGInference(object):
             torch.utils.data.TensorDataset(xs),
             batch_size=32,
             shuffle=False,
-            num_workers=4,
+            num_workers=0,
             drop_last=False,
         )
 
@@ -575,7 +567,7 @@ class SWAGInference(object):
             self.train_dataset,
             batch_size=32,
             shuffle=False,
-            num_workers=4,
+            num_workers=0,
             drop_last=False,
         )
 
