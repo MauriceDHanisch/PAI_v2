@@ -131,11 +131,11 @@ class SWAGInference(object):
         model_dir: pathlib.Path,
         inference_mode: InferenceMode = InferenceMode.SWAG_FULL,
         # TODO(2): optionally add/tweak hyperparameters
-        swag_epochs: int = 30,
+        swag_epochs: int = 100,
         swag_learning_rate: float = 0.045,
         swag_update_freq: int = 1,
         deviation_matrix_max_rank: int = 15,
-        bma_samples: int = 30,
+        bma_samples: int = 100,
     ):
         """
         :param train_xs: Training images (for storage only)
@@ -397,15 +397,13 @@ class SWAGInference(object):
         Hence, after calling this method, self.network corresponds to a new posterior sample.
         """
 
+        # Instead of acting on a full vector of parameters, all operations can be done on per-layer parameters.
         for name, param in self.network.named_parameters():
             # SWAG-diagonal part
             z_1 = torch.randn(param.size(), device=self.device)
             current_mean = self.mean[name]
             current_sq_mean = self.sq_mean[name]
-            # Adjust the variance calculation as per the photo
-            current_var = (0.5 * (current_sq_mean - current_mean.pow(2))).to(self.device)
-            current_std = torch.sqrt(current_var)
-            
+            current_std = torch.sqrt((current_sq_mean - current_mean.pow(2)) / 2).to(self.device) # updated sqrt(2) missing
             assert current_mean.size() == param.size() and current_std.size() == param.size()
 
             # Sample the diagonal part
@@ -413,25 +411,24 @@ class SWAGInference(object):
 
             # Full SWAG part
             if self.inference_mode == InferenceMode.SWAG_FULL:
-                # Prepare a list to hold the deviation updates
-                deviation_updates = []
-                # Iterate over the deviations deque, which contains dictionaries
-                for deviation_dict in self.deviations:
-                    # Extract the deviation for the current parameter
-                    deviation = deviation_dict[name]  # Assuming the deviation is stored under the parameter's name
-                    z = torch.randn(1, device=self.device)
-                    deviation_update = (1/(2*self.deviation_matrix_max_rank)**0.5) * deviation * z
-                    deviation_updates.append(deviation_update)
+                # Flatten the deviations and ensure they are 2D before transposing
+                flattened_deviations = torch.stack([dev[name].flatten() for dev in self.deviations]).to(self.device)
+                # Ensure it's 2D for matrix multiplication
+                if flattened_deviations.dim() == 1:
+                    flattened_deviations = flattened_deviations.unsqueeze(0)
+                z_2 = torch.randn(flattened_deviations.size(0), device=self.device)
+                # Perform the matrix multiplication with proper scaling
+                scaling_factor = 2.0 * (self.deviation_matrix_max_rank - 1) #(len(self.deviations) - 1)
+                if scaling_factor <= 0:
+                    raise ValueError("Scaling factor for low-rank update must be positive")
+                low_rank_update = (flattened_deviations.t().matmul(z_2)) / torch.sqrt(torch.tensor(scaling_factor, device=self.device))
 
-                # Sum all deviation updates (assuming they are properly sized tensors)
-                if deviation_updates:
-                    sampled_param += torch.sum(torch.stack(deviation_updates), dim=0).view(param.size())
+                # Reshape to the parameter's shape and update
+                sampled_param += low_rank_update.view(param.size())
 
-            # In-place update of the parameter
-            param.data.copy_(sampled_param)
+        param.data.copy_(sampled_param)  # Update the parameter in-place
 
         self._update_batchnorm()
-
 
     def predict_labels(self, predicted_probabilities: torch.Tensor) -> torch.Tensor:
         """
@@ -675,7 +672,7 @@ class SWAGScheduler(torch.optim.lr_scheduler.LRScheduler):
         current_step = current_epoch * self.steps_per_epoch
         cosine = 0.5 * (1 + math.cos(math.pi * current_step / max_epoch))
         new_lr = self.min_lr + (old_lr - self.min_lr) * cosine
-        return old_lr
+        return new_lr
 
 
     # TODO(2): Add and store additional arguments if you decide to implement a custom scheduler

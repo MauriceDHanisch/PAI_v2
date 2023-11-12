@@ -397,13 +397,13 @@ class SWAGInference(object):
         Hence, after calling this method, self.network corresponds to a new posterior sample.
         """
 
-        # Instead of acting on a full vector of parameters, all operations can be done on per-layer parameters.
         for name, param in self.network.named_parameters():
             # SWAG-diagonal part
             z_1 = torch.randn(param.size(), device=self.device)
             current_mean = self.mean[name]
             current_sq_mean = self.sq_mean[name]
-            current_std = torch.sqrt((current_sq_mean - current_mean.pow(2)) / 2).to(self.device) # updated sqrt(2) missing
+            current_var = current_sq_mean - current_mean.pow(2)
+            current_std = torch.sqrt(current_var).to(self.device)
             assert current_mean.size() == param.size() and current_std.size() == param.size()
 
             # Sample the diagonal part
@@ -411,24 +411,20 @@ class SWAGInference(object):
 
             # Full SWAG part
             if self.inference_mode == InferenceMode.SWAG_FULL:
-                # Flatten the deviations and ensure they are 2D before transposing
                 flattened_deviations = torch.stack([dev[name].flatten() for dev in self.deviations]).to(self.device)
-                # Ensure it's 2D for matrix multiplication
                 if flattened_deviations.dim() == 1:
                     flattened_deviations = flattened_deviations.unsqueeze(0)
                 z_2 = torch.randn(flattened_deviations.size(0), device=self.device)
-                # Perform the matrix multiplication with proper scaling
-                scaling_factor = 2.0 * (self.deviation_matrix_max_rank - 1) #(len(self.deviations) - 1)
+                scaling_factor = (self.deviation_matrix_max_rank - 1)
                 if scaling_factor <= 0:
                     raise ValueError("Scaling factor for low-rank update must be positive")
-                low_rank_update = (flattened_deviations.t().matmul(z_2)) / torch.sqrt(torch.tensor(scaling_factor, device=self.device))
-
-                # Reshape to the parameter's shape and update
+                low_rank_update = (flattened_deviations.t().matmul(z_2)) / torch.sqrt(torch.tensor(2 * scaling_factor, device=self.device))
                 sampled_param += low_rank_update.view(param.size())
 
-        param.data.copy_(sampled_param)  # Update the parameter in-place
+            param.data.copy_(sampled_param)  # Update the parameter in-place
 
         self._update_batchnorm()
+
 
     def predict_labels(self, predicted_probabilities: torch.Tensor) -> torch.Tensor:
         """
@@ -672,7 +668,7 @@ class SWAGScheduler(torch.optim.lr_scheduler.LRScheduler):
         current_step = current_epoch * self.steps_per_epoch
         cosine = 0.5 * (1 + math.cos(math.pi * current_step / max_epoch))
         new_lr = self.min_lr + (old_lr - self.min_lr) * cosine
-        return new_lr
+        return old_lr
 
 
     # TODO(2): Add and store additional arguments if you decide to implement a custom scheduler
