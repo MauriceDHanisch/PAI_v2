@@ -402,10 +402,8 @@ class SWAGInference(object):
             z_1 = torch.randn(param.size(), device=self.device)
             current_mean = self.mean[name]
             current_sq_mean = self.sq_mean[name]
-            # Adjust the variance calculation as per the photo
-            current_var = (0.5 * (current_sq_mean - current_mean.pow(2))).to(self.device)
-            current_std = torch.sqrt(current_var)
-            
+            current_var = current_sq_mean - current_mean.pow(2)
+            current_std = torch.sqrt(current_var).to(self.device)
             assert current_mean.size() == param.size() and current_std.size() == param.size()
 
             # Sample the diagonal part
@@ -413,22 +411,17 @@ class SWAGInference(object):
 
             # Full SWAG part
             if self.inference_mode == InferenceMode.SWAG_FULL:
-                # Prepare a list to hold the deviation updates
-                deviation_updates = []
-                # Iterate over the deviations deque, which contains dictionaries
-                for deviation_dict in self.deviations:
-                    # Extract the deviation for the current parameter
-                    deviation = deviation_dict[name]  # Assuming the deviation is stored under the parameter's name
-                    z = torch.randn(1, device=self.device)
-                    deviation_update = (1/(2*self.deviation_matrix_max_rank)**0.5) * deviation * z
-                    deviation_updates.append(deviation_update)
+                flattened_deviations = torch.stack([dev[name].flatten() for dev in self.deviations]).to(self.device)
+                if flattened_deviations.dim() == 1:
+                    flattened_deviations = flattened_deviations.unsqueeze(0)
+                z_2 = torch.randn(flattened_deviations.size(0), device=self.device)
+                scaling_factor = (self.deviation_matrix_max_rank - 1)
+                if scaling_factor <= 0:
+                    raise ValueError("Scaling factor for low-rank update must be positive")
+                low_rank_update = (flattened_deviations.t().matmul(z_2)) / torch.sqrt(torch.tensor(2 * scaling_factor, device=self.device))
+                sampled_param += low_rank_update.view(param.size())
 
-                # Sum all deviation updates (assuming they are properly sized tensors)
-                if deviation_updates:
-                    sampled_param += torch.sum(torch.stack(deviation_updates), dim=0).view(param.size())
-
-            # In-place update of the parameter
-            param.data.copy_(sampled_param)
+            param.data.copy_(sampled_param)  # Update the parameter in-place
 
         self._update_batchnorm()
 
