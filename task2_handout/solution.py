@@ -131,11 +131,11 @@ class SWAGInference(object):
         model_dir: pathlib.Path,
         inference_mode: InferenceMode = InferenceMode.SWAG_FULL,
         # TODO(2): optionally add/tweak hyperparameters
-        swag_epochs: int = 30,
+        swag_epochs: int = 60,
         swag_learning_rate: float = 0.045,
         swag_update_freq: int = 1,
         deviation_matrix_max_rank: int = 15,
-        bma_samples: int = 30,
+        bma_samples: int = 60,
     ):
         """
         :param train_xs: Training images (for storage only)
@@ -420,7 +420,7 @@ class SWAGInference(object):
                     # Extract the deviation for the current parameter
                     deviation = deviation_dict[name]  # Assuming the deviation is stored under the parameter's name
                     z = torch.randn(1, device=self.device)
-                    deviation_update = (1/(2*self.deviation_matrix_max_rank)**0.5) * deviation * z
+                    deviation_update = (1/(2*(self.deviation_matrix_max_rank-1))**0.5) * deviation * z
                     deviation_updates.append(deviation_update)
 
                 # Sum all deviation updates (assuming they are properly sized tensors)
@@ -670,12 +670,12 @@ class SWAGScheduler(torch.optim.lr_scheduler.LRScheduler):
 
         This method should return a single float: the new learning rate.
         """
-        slowdown_factor = 15 # Increase this factor to slow down the learning rate decrease (= 1 for no slowdown)
+        slowdown_factor = 2 # Increase this factor to slow down the learning rate decrease (= 1 for no slowdown)
         max_epoch = self.epochs * self.steps_per_epoch * slowdown_factor # hacky fix to set on 30 should be self.epochs
         current_step = current_epoch * self.steps_per_epoch
         cosine = 0.5 * (1 + math.cos(math.pi * current_step / max_epoch))
         new_lr = self.min_lr + (old_lr - self.min_lr) * cosine
-        return old_lr
+        return new_lr
 
 
     # TODO(2): Add and store additional arguments if you decide to implement a custom scheduler
