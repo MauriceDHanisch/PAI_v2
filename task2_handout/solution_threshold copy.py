@@ -49,8 +49,7 @@ def main():
     train_ys = torch.from_numpy(raw_train_meta["train_ys"])
     train_is_snow = torch.from_numpy(raw_train_meta["train_is_snow"])
     train_is_cloud = torch.from_numpy(raw_train_meta["train_is_cloud"])
-    dataset_train = torch.utils.data.TensorDataset(
-        train_xs, train_is_snow, train_is_cloud, train_ys)
+    dataset_train = torch.utils.data.TensorDataset(train_xs, train_is_snow, train_is_cloud, train_ys)
 
     # Load validation data
     val_xs = torch.from_numpy(np.load(data_dir / "val_xs.npz")["val_xs"])
@@ -58,8 +57,7 @@ def main():
     val_ys = torch.from_numpy(raw_val_meta["val_ys"])
     val_is_snow = torch.from_numpy(raw_val_meta["val_is_snow"])
     val_is_cloud = torch.from_numpy(raw_val_meta["val_is_cloud"])
-    dataset_val = torch.utils.data.TensorDataset(
-        val_xs, val_is_snow, val_is_cloud, val_ys)
+    dataset_val = torch.utils.data.TensorDataset(val_xs, val_is_snow, val_is_cloud, val_ys)
 
     # Fix all randomness
     setup_seeds()
@@ -133,11 +131,11 @@ class SWAGInference(object):
         model_dir: pathlib.Path,
         inference_mode: InferenceMode = InferenceMode.SWAG_FULL,
         # TODO(2): optionally add/tweak hyperparameters
-        swag_epochs: int = 60,
+        swag_epochs: int = 30,
         swag_learning_rate: float = 0.045,
         swag_update_freq: int = 1,
         deviation_matrix_max_rank: int = 15,
-        bma_samples: int = 60,
+        bma_samples: int = 30,
     ):
         """
         :param train_xs: Training images (for storage only)
@@ -195,8 +193,7 @@ class SWAGInference(object):
         """
 
         # Create a copy of the current network weights
-        current_params = {name: param.detach()
-                          for name, param in self.network.named_parameters()}
+        current_params = {name: param.detach() for name, param in self.network.named_parameters()}
 
         # SWAG-diagonal
         # Increment the number of models
@@ -221,8 +218,6 @@ class SWAGInference(object):
                 # If we reached max capacity, replace the oldest deviation
                 self.deviations.pop()
                 self.deviations.appendleft(deviation)
-
-        self.epoch += 1
 
     def fit_swag(self, loader: torch.utils.data.DataLoader) -> None:
         """
@@ -258,7 +253,6 @@ class SWAGInference(object):
         self.network.train()
         with tqdm.trange(self.swag_epochs, desc="Running gradient descent for SWA") as pbar:
             pbar_dict = {}
-            self.epoch = 0
             for epoch in pbar:
                 average_loss = 0.0
                 average_accuracy = 0.0
@@ -403,15 +397,13 @@ class SWAGInference(object):
         Hence, after calling this method, self.network corresponds to a new posterior sample.
         """
 
+        # Instead of acting on a full vector of parameters, all operations can be done on per-layer parameters.
         for name, param in self.network.named_parameters():
             # SWAG-diagonal part
             z_1 = torch.randn(param.size(), device=self.device)
             current_mean = self.mean[name]
             current_sq_mean = self.sq_mean[name]
-            # Adjust the variance calculation as per the photo
-            current_var = (0.5 * (current_sq_mean - current_mean.pow(2))).to(self.device)
-            current_std = torch.sqrt(current_var)
-            
+            current_std = torch.sqrt(current_sq_mean - current_mean**2).to(self.device)
             assert current_mean.size() == param.size() and current_std.size() == param.size()
 
             # Sample the diagonal part
@@ -419,25 +411,24 @@ class SWAGInference(object):
 
             # Full SWAG part
             if self.inference_mode == InferenceMode.SWAG_FULL:
-                # Prepare a list to hold the deviation updates
-                deviation_updates = []
-                # Iterate over the deviations deque, which contains dictionaries
-                for deviation_dict in self.deviations:
-                    # Extract the deviation for the current parameter
-                    deviation = deviation_dict[name]  # Assuming the deviation is stored under the parameter's name
-                    z = torch.randn(1, device=self.device)
-                    deviation_update = (1/(2*(self.deviation_matrix_max_rank-1))**0.5) * deviation * z
-                    deviation_updates.append(deviation_update)
+                # Flatten the deviations and ensure they are 2D before transposing
+                flattened_deviations = torch.stack([dev[name].flatten() for dev in self.deviations]).to(self.device)
+                # Ensure it's 2D for matrix multiplication
+                if flattened_deviations.dim() == 1:
+                    flattened_deviations = flattened_deviations.unsqueeze(0)
+                z_2 = torch.randn(flattened_deviations.size(0), device=self.device)
+                # Perform the matrix multiplication with proper scaling
+                scaling_factor = 2.0 * (len(self.deviations) - 1)
+                if scaling_factor <= 0:
+                    raise ValueError("Scaling factor for low-rank update must be positive")
+                low_rank_update = (flattened_deviations.t().matmul(z_2)) / torch.sqrt(torch.tensor(scaling_factor, device=self.device))
 
-                # Sum all deviation updates (assuming they are properly sized tensors)
-                if deviation_updates:
-                    sampled_param += torch.sum(torch.stack(deviation_updates), dim=0).view(param.size())
+                # Reshape to the parameter's shape and update
+                sampled_param += low_rank_update.view(param.size())
 
-            # In-place update of the parameter
-            param.data.copy_(sampled_param)
+        param.data.copy_(sampled_param)  # Update the parameter in-place
 
         self._update_batchnorm()
-
 
     def predict_labels(self, predicted_probabilities: torch.Tensor) -> torch.Tensor:
         """
@@ -450,11 +441,9 @@ class SWAGInference(object):
 
         # label_probabilities contains the per-row maximum values in predicted_probabilities,
         # max_likelihood_labels the corresponding column index (equivalent to class).
-        label_probabilities, max_likelihood_labels = torch.max(
-            predicted_probabilities, dim=-1)
+        label_probabilities, max_likelihood_labels = torch.max(predicted_probabilities, dim=-1)
         num_samples, num_classes = predicted_probabilities.size()
-        assert label_probabilities.size() == (
-            num_samples,) and max_likelihood_labels.size() == (num_samples,)
+        assert label_probabilities.size() == (num_samples,) and max_likelihood_labels.size() == (num_samples,)
 
         # A model without uncertainty awareness might simply predict the most likely label per sample:
         # return max_likelihood_labels
@@ -588,7 +577,6 @@ class SWAGInference(object):
         self.network = self.network.eval()
 
         # Create a loader that we can deterministically iterate many times if necessary
-        # print("xs:", xs)
         loader = torch.utils.data.DataLoader(
             torch.utils.data.TensorDataset(xs),
             batch_size=32,
@@ -596,7 +584,6 @@ class SWAGInference(object):
             num_workers=0,
             drop_last=False,
         )
-        # print("loader:", loader)
 
         with torch.no_grad():  # save memory by not tracking gradients
             if self.inference_mode == InferenceMode.MAP:
@@ -680,8 +667,8 @@ class SWAGScheduler(torch.optim.lr_scheduler.LRScheduler):
 
         This method should return a single float: the new learning rate.
         """
-        slowdown_factor = 2 # Increase this factor to slow down the learning rate decrease (= 1 for no slowdown)
-        max_epoch = self.epochs * self.steps_per_epoch * slowdown_factor # hacky fix to set on 30 should be self.epochs
+        slowdown_factor = 5 # Increase this factor to slow down the learning rate decrease (= 1 for no slowdown)
+        max_epoch = self.epochs * self.steps_per_epoch * slowdown_factor
         current_step = current_epoch * self.steps_per_epoch
         cosine = 0.5 * (1 + math.cos(math.pi * current_step / max_epoch))
         new_lr = self.min_lr + (old_lr - self.min_lr) * cosine
@@ -694,7 +681,7 @@ class SWAGScheduler(torch.optim.lr_scheduler.LRScheduler):
         optimizer: torch.optim.Optimizer,
         epochs: int,
         steps_per_epoch: int,
-        min_lr=1e-5,
+        min_lr=1e-6,
     ):
         self.epochs = epochs
         self.steps_per_epoch = steps_per_epoch
@@ -707,8 +694,7 @@ class SWAGScheduler(torch.optim.lr_scheduler.LRScheduler):
                 "To get the last learning rate computed by the scheduler, please use `get_last_lr()`.", UserWarning
             )
         return [
-            self.calculate_lr(self.last_epoch /
-                              self.steps_per_epoch, group["lr"])
+            self.calculate_lr(self.last_epoch / self.steps_per_epoch, group["lr"])
             for group in self.optimizer.param_groups
         ]
 
@@ -760,16 +746,13 @@ def evaluate(
     # 2. Accuracy on all samples that have a known label. Predicting -1 on those counts as wrong here.
     # 3. Accuracy on all samples that have a known label w.r.t. the class with the highest predicted probability.
     accuracy = torch.mean((pred_ys == ys).float()).item()
-    accuracy_nonambiguous = torch.mean(
-        (pred_ys[nonambiguous_mask] == ys[nonambiguous_mask]).float()).item()
+    accuracy_nonambiguous = torch.mean((pred_ys[nonambiguous_mask] == ys[nonambiguous_mask]).float()).item()
     accuracy_nonambiguous_argmax = torch.mean(
         (pred_ys_argmax[nonambiguous_mask] == ys[nonambiguous_mask]).float()
     ).item()
     print(f"Accuracy (raw): {accuracy:.4f}")
-    print(
-        f"Accuracy (non-ambiguous only, your predictions): {accuracy_nonambiguous:.4f}")
-    print(
-        f"Accuracy (non-ambiguous only, predicting most-likely class): {accuracy_nonambiguous_argmax:.4f}")
+    print(f"Accuracy (non-ambiguous only, your predictions): {accuracy_nonambiguous:.4f}")
+    print(f"Accuracy (non-ambiguous only, predicting most-likely class): {accuracy_nonambiguous_argmax:.4f}")
 
     # Determine which threshold would yield the smallest cost on the validation data
     # Note that this threshold does not necessarily generalize to the test set!
@@ -777,8 +760,7 @@ def evaluate(
     thresholds = [0.0] + list(torch.unique(pred_prob_max, sorted=True))
     costs = []
     for threshold in thresholds:
-        thresholded_ys = torch.where(
-            pred_prob_max <= threshold, -1 * torch.ones_like(pred_ys), pred_ys)
+        thresholded_ys = torch.where(pred_prob_max <= threshold, -1 * torch.ones_like(pred_ys), pred_ys)
         costs.append(cost_function(thresholded_ys, ys).item())
     best_idx = np.argmin(costs)
     print(f"Best cost {costs[best_idx]} at threshold {thresholds[best_idx]}")
@@ -806,8 +788,7 @@ def evaluate(
                 sample_idx = most_confident_indices[5 * row // 2 + col]
                 ax[row, col].imshow(xs[sample_idx].permute(1, 2, 0).numpy())
                 ax[row, col].set_axis_off()
-                ax[row + 1,
-                    col].set_title(f"pred. {pred_ys[sample_idx]}, true {ys[sample_idx]}")
+                ax[row + 1, col].set_title(f"pred. {pred_ys[sample_idx]}, true {ys[sample_idx]}")
                 bar_colors = ["C0"] * 6
                 if ys[sample_idx] >= 0:
                     bar_colors[ys[sample_idx]] = "C1"
@@ -826,8 +807,7 @@ def evaluate(
                 sample_idx = least_confident_indices[5 * row // 2 + col]
                 ax[row, col].imshow(xs[sample_idx].permute(1, 2, 0).numpy())
                 ax[row, col].set_axis_off()
-                ax[row + 1,
-                    col].set_title(f"pred. {pred_ys[sample_idx]}, true {ys[sample_idx]}")
+                ax[row + 1, col].set_title(f"pred. {pred_ys[sample_idx]}, true {ys[sample_idx]}")
                 bar_colors = ["C0"] * 6
                 if ys[sample_idx] >= 0:
                     bar_colors[ys[sample_idx]] = "C1"
@@ -847,7 +827,6 @@ class CNN(torch.nn.Module):
     you need to re-run MAP inference and cannot use the provided pretrained weights anymore.
     Hence, you need to set `USE_PRETRAINED_INIT = False` at the top of this file.
     """
-
     def __init__(
         self,
         in_channels: int,
