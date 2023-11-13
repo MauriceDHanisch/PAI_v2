@@ -146,7 +146,7 @@ class SWAGInference(object):
         #  as a dictionary that maps from weight name to values.
         #  Hint: you never need to consider the full vector of weights,
         #  but can always act on per-layer weights (in the format that _create_weight_copy() returns)
-        self.mean_parameters_diag = self._create_weight_copy()
+        self.mean_parameters = self._create_weight_copy()
         self.deviation_parameters = self._create_weight_copy()
         self.n_models = 0        
 
@@ -171,7 +171,7 @@ class SWAGInference(object):
         for name, param in current_params.items():
             # TODO(1): update SWAG-diagonal attributes for weight `name` using `current_params` and `param`
             # update moments
-            self.mean_parameters_diag[name] = (self.n_models * self.mean_parameters[name] + param) / (self.n_models + 1)
+            self.mean_parameters[name] = (self.n_models * self.mean_parameters[name] + param) / (self.n_models + 1)
             self.deviation_parameters[name] = (self.n_models * self.deviation_parameters[name] + param ** 2) / (
                 self.n_models + 1
             )
@@ -179,9 +179,10 @@ class SWAGInference(object):
         # Full SWAG
         if self.inference_mode == InferenceMode.SWAG_FULL:
             # TODO(2): update full SWAG attributes for weight `name` using `current_params` and `param`
+            deviation = {name: param - self.mean_parameters[name] for name, param in current_params.items()}
             if len(self.deviation_matrix) == self.deviation_matrix_max_rank:
                 self.deviation_matrix.popleft()
-            self.deviation_matrix.append(current_params)
+            self.deviation_matrix.append(deviation)
 
     def fit_swag(self, loader: torch.utils.data.DataLoader) -> None:
         """
@@ -290,11 +291,16 @@ class SWAGInference(object):
         per_model_sample_predictions = []
         for _ in tqdm.trange(self.bma_samples, desc="Performing Bayesian model averaging"):
             # TODO(1): Sample new parameters for self.network from the SWAG approximate posterior
-            raise NotImplementedError("Sample network parameters")
+            self.sample_parameters()
+            with torch.no_grad:
+                for batch_xs, _, _, _ in loader:
+                    # Perform inference for all samples in loader using current model sample,
+                    # and add the predictions to per_model_sample_predictions
+                    per_model_sample_predictions.append(self.network(batch_xs))
 
             # TODO(1): Perform inference for all samples in `loader` using current model sample,
             #  and add the predictions to per_model_sample_predictions
-            raise NotImplementedError("Perform inference using current model")
+            raise NotImplementedError("Perform inference for all samples in loader")        
 
         assert len(per_model_sample_predictions) == self.bma_samples
         assert all(
@@ -305,8 +311,7 @@ class SWAGInference(object):
         )
 
         # TODO(1): Average predictions from different model samples into bma_probabilities
-        raise NotImplementedError("Aggregate predictions from model samples")
-        bma_probabilities = ...
+        bma_probabilities = torch.stack(per_model_sample_predictions).mean(dim=0)
 
         assert bma_probabilities.dim() == 2 and bma_probabilities.size(1) == 6  # N x C
         return bma_probabilities
