@@ -131,11 +131,11 @@ class SWAGInference(object):
         model_dir: pathlib.Path,
         inference_mode: InferenceMode = InferenceMode.SWAG_FULL,
         # TODO(2): optionally add/tweak hyperparameters
-        swag_epochs: int = 60,
+        swag_epochs: int = 30,
         swag_learning_rate: float = 0.045,
         swag_update_freq: int = 1,
         deviation_matrix_max_rank: int = 15,
-        bma_samples: int = 60,
+        bma_samples: int = 30,
     ):
         """
         :param train_xs: Training images (for storage only)
@@ -300,7 +300,8 @@ class SWAGInference(object):
 
         # TODO(1): DONE pick a prediction threshold, either constant or adaptive.
         #  The provided value should suffice to pass the easy baseline.
-        self._prediction_threshold = 2.0 / 3.0
+        # self._prediction_threshold = 2.0 / 3.0
+        self._prediction_threshold = 0.68
 
         # TODO(2): perform additional calibration if desired.
         #  Feel free to remove or change the prediction threshold.
@@ -309,26 +310,6 @@ class SWAGInference(object):
 
         val_loader = torch.utils.data.DataLoader(validation_data, batch_size=16) 
         val_xs, val_is_snow, val_is_cloud, val_ys = [t.to(self.device) for t in validation_data.tensors]
-
-        # # Use predict_probabilities_swag for predictions and confidences
-        # probabilities = self.predict_probabilities_swag(val_loader)
-        # predictions = torch.argmax(probabilities, dim=1)
-        # confidences = torch.max(probabilities, dim=1).values
-
-        # best_threshold = 0.0
-        # best_metric = -1
-        
-        # num = 100
-        # for threshold in np.linspace(0, 1, num=num):
-        #     classified = confidences > threshold
-        #     metric = calculate_metric(classified, val_ys)  # Implement calculate_metric based on your task's metric
-
-        #     if metric > best_metric:
-        #         best_metric = metric
-        #         best_threshold = threshold
-
-        # self._prediction_threshold = best_threshold
-        # print(f"Best threshold for calibration for num: {num}:", best_threshold)
 
         assert val_xs.size() == (140, 3, 60, 60)  # N x C x H x W
         assert val_ys.size() == (140,)
@@ -420,7 +401,7 @@ class SWAGInference(object):
                     # Extract the deviation for the current parameter
                     deviation = deviation_dict[name]  # Assuming the deviation is stored under the parameter's name
                     z = torch.randn(1, device=self.device)
-                    deviation_update = (1/(2*(self.deviation_matrix_max_rank-1))**0.5) * deviation * z
+                    deviation_update = (1/(2*self.deviation_matrix_max_rank)**0.5) * deviation * z
                     deviation_updates.append(deviation_update)
 
                 # Sum all deviation updates (assuming they are properly sized tensors)
@@ -669,13 +650,25 @@ class SWAGScheduler(torch.optim.lr_scheduler.LRScheduler):
         old_lr is the previous learning rate.
 
         This method should return a single float: the new learning rate.
-        """
-        slowdown_factor = 2 # Increase this factor to slow down the learning rate decrease (= 1 for no slowdown)
-        max_epoch = self.epochs * self.steps_per_epoch * slowdown_factor # hacky fix to set on 30 should be self.epochs
-        current_step = current_epoch * self.steps_per_epoch
-        cosine = 0.5 * (1 + math.cos(math.pi * current_step / max_epoch))
-        new_lr = self.min_lr + (old_lr - self.min_lr) * cosine
-        return new_lr
+        """        
+        # current_step = current_epoch * self.steps_per_epoch
+
+        # # Warm-up Phase
+        # if current_epoch < self.warmup_epochs:
+        #     warmup_factor = current_epoch / self.warmup_epochs
+        #     return self.initial_lr * warmup_factor
+
+        # # Adaptive Slowdown Factor
+        # progress = current_epoch / self.epochs
+        # slowdown_factor = 1 + 1 * (1 - progress)  # Adjust the multiplier as needed
+
+        # # Adjusted Max Epoch for Slowdown
+        # max_epoch = self.epochs * self.steps_per_epoch * slowdown_factor
+
+        # # Cosine Annealing
+        # cosine = 0.5 * (1 + math.cos(math.pi * current_step / max_epoch))
+        # new_lr = self.min_lr + (self.initial_lr - self.min_lr) * cosine
+        return old_lr
 
 
     # TODO(2): Add and store additional arguments if you decide to implement a custom scheduler
@@ -684,11 +677,15 @@ class SWAGScheduler(torch.optim.lr_scheduler.LRScheduler):
         optimizer: torch.optim.Optimizer,
         epochs: int,
         steps_per_epoch: int,
-        min_lr=1e-5,
+        min_lr=1e-3,
+        initial_lr=0.045,
+        warmup_epochs=5
     ):
         self.epochs = epochs
         self.steps_per_epoch = steps_per_epoch
         self.min_lr = min_lr
+        self.initial_lr = initial_lr
+        self.warmup_epochs = warmup_epochs
         super().__init__(optimizer, last_epoch=-1, verbose=False)
 
     def get_lr(self):
