@@ -2,7 +2,7 @@
 import numpy as np
 from scipy.optimize import fmin_l_bfgs_b
 from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import Matern, RBF, DotProduct
+from sklearn.gaussian_process.kernels import Matern, RBF, DotProduct, WhiteKernel
 from scipy.stats import norm
 # import additional ...
 
@@ -20,9 +20,9 @@ class BO_algo():
         # TODO: Define all relevant class members for your BO algorithm here.
         self.data = []
         self.gp = GaussianProcessRegressor(
-            kernel=Matern(nu=2.5, length_scale=1.0))
+            kernel=Matern(nu=2.5, length_scale=1.0) + WhiteKernel(noise_level=0.15**2))
         self.gp_v = GaussianProcessRegressor(
-            kernel=(DotProduct(sigma_0=0) + Matern(nu=2.5, length_scale=1.0)))
+            kernel=(DotProduct(sigma_0=0) + Matern(nu=2.5, length_scale=1.0) + WhiteKernel(noise_level=1e-8)))
         self.X_sample = None
         self.Y_sample = None
         self.V_sample = None
