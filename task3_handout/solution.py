@@ -10,6 +10,7 @@ from scipy.stats import norm
 # global variables
 DOMAIN = np.array([[0, 10]])  # restrict \theta in [0, 10]
 SAFETY_THRESHOLD = 4  # threshold, upper bound of SA
+LAMBDA = 50
 
 
 # TODO: implement a self-contained solution in the BO_algo class.
@@ -18,8 +19,7 @@ class BO_algo():
     def __init__(self):
         """Initializes the algorithm with a parameter configuration."""
         # TODO: Define all relevant class members for your BO algorithm here.
-        self.lambda_ = 0
-        self.mu = 1e-4
+        self.lambda_ = LAMBDA
         self.data = []
         self.gp = GaussianProcessRegressor(
             kernel=Matern(nu=2.5, length_scale=1.0) + WhiteKernel(noise_level=0.15**2))
@@ -47,7 +47,6 @@ class BO_algo():
 
         # Optimize the acquisition function
         x_opt = self.optimize_acquisition_function()
-        self.update_lagrangian_multiplier(x_opt)
 
         return np.atleast_2d(x_opt)
 
@@ -81,21 +80,8 @@ class BO_algo():
 
         return x_opt
 
-    def update_lagrangian_multiplier(self, x):
-        """Update the Lagrange multiplier and penalty parameter based on constraint violation."""
-        # This function should be called after each iteration of the optimization
-        mu_v, _ = self.gp_v.predict(x, return_std=True)
-        constraint_violation = np.maximum(0, mu_v - SAFETY_THRESHOLD)
-
-        # Update the Lagrange multiplier
-        self.lambda_ += self.mu * constraint_violation
-
-        # Optionally update the penalty parameter (mu) here if the constraint is still violated
-        if constraint_violation > 0:
-            self.mu *= 10  # Example: increase mu by a factor of 10
-
-    """def acquisition_function(self, x: np.ndarray):
-        """"""Compute the acquisition function for x.
+    def acquisition_function(self, x: np.ndarray):
+        """Compute the acquisition function for x.
 
         Parameters
         ----------
@@ -107,7 +93,7 @@ class BO_algo():
         af_value: np.ndarray
             shape (N, 1)nh
             Value of the acquisition function at x
-        """"""
+        """
         x = np.atleast_2d(x)
         # TODO: Implement the acquisition function you want to optimize.
         #  Predict the mean and standard deviation of each point x
@@ -121,36 +107,20 @@ class BO_algo():
 
         # Probability of satisfying the constraint
         mu_v, sigma_v = self.gp_v.predict(x, return_std=True)
-        prob_feasibility = norm.cdf((SAFETY_THRESHOLD - mu_v) / sigma_v)
+        # prob_feasibility = norm.cdf((SAFETY_THRESHOLD - mu_v) / sigma_v)
 
         # Adjust EI by the probability of feasibility
-        af_value = ei * prob_feasibility
+        # af_value = ei * prob_feasibility
         # print(af_value.shape)
 
-        return af_value.reshape(-1, 1)"""
+        # Calculate the penalty term based on constraint violations
+        # Apply the penalty only when v(x) > 0
+        penalty = self.lambda_ * np.maximum(mu_v+sigma_v, 0)
 
-    def acquisition_function(self, x: np.ndarray):
-        """Compute the augmented acquisition function for x incorporating Lagrangian relaxation."""
-        x = np.atleast_2d(x)
-        mu, sigma = self.gp.predict(x, return_std=True)
-        mu_sample_opt = np.max(self.Y_sample)
+        # Subtract the penalty term from the Expected Improvement
+        af_value = ei - penalty
 
-        imp = mu - mu_sample_opt
-        Z = imp / sigma
-        ei = imp * norm.cdf(Z) + sigma * norm.pdf(Z)
-        ei[sigma == 0.0] = 0.0
-
-        # Compute constraint violation penalty
-        mu_v, sigma_v = self.gp_v.predict(x, return_std=True)
-        constraint_violation = np.maximum(0, mu_v - SAFETY_THRESHOLD)
-        penalty = self.lambda_ * constraint_violation + \
-            (self.mu / 2) * constraint_violation**2
-
-        # Adjust EI by the probability of feasibility and subtract the penalty
-        prob_feasibility = norm.cdf((SAFETY_THRESHOLD - mu_v) / sigma_v)
-        augmented_ei = (ei * prob_feasibility) - penalty
-
-        return augmented_ei.reshape(-1, 1)
+        return af_value.reshape(-1, 1)
 
     def add_data_point(self, x: float, f: float, v: float):
         """
