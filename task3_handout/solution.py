@@ -8,20 +8,27 @@ from scipy.stats import norm
 
 # global variables
 # only need to edit in here
-DOMAIN = np.array([[0, 10]])  # restrict \theta in [0, 10]
+DOMAIN = np.array([[0, 8]])  # restrict \theta in [0, 10]
 SAFETY_THRESHOLD = 4  # threshold, upper bound of SA
-LAMBDA = 50  # weight of constraint violation
+BETA = 2 # safety parameter
+KAPPA = 1 # exploration parameter
+LAMBDA = 50 # weight of constraint violation
 LENGTH_F = 1  # length scale of f
 LENGTH_V = 1  # length scale of v
-NU_F = 1.5  # smoothness of f
-NU_V = 1.5  # smoothness of v
+NU_F = 2.5  # smoothness of f
+NU_V = 2.5  # smoothness of v
 SIGMA_F = 0.15  # noise level of f
 SIGMA_V = 1e-4  # noise level of v
 
+# MATERN KERNEL
 KERNEL_F = Matern(length_scale=LENGTH_F, nu=NU_F) + WhiteKernel(noise_level=SIGMA_F**2)
 KERNEL_V = DotProduct(sigma_0=0) + Matern(length_scale=LENGTH_V, nu=NU_V) + WhiteKernel(noise_level=SIGMA_V**2)
 
-# fix random seed for reproducibility
+# # RBF KERNEL
+# KERNEL_F = np.sqrt(2) * RBF(length_scale=LENGTH_F) + WhiteKernel(noise_level=SIGMA_F**2)
+# KERNEL_V = 0.5 * RBF(length_scale=LENGTH_V) + WhiteKernel(noise_level=SIGMA_V**2)
+
+# # fix random seed for reproducibility while tuning hyperparameters
 np.random.seed(0)
 
 # TODO: implement a self-contained solution in the BO_algo class.
@@ -50,7 +57,17 @@ class BO_algo():
         # using functions f and v.
         # In implementing this function, you may use
         # optimize_acquisition_function() defined below.
+        
         x_opt = self.optimize_acquisition_function()
+
+        # # reduce domain to the range of possible x
+        # global DOMAIN
+        # DOMAIN = np.array([[
+        #     np.min(self.X, DOMAIN[:, 0], axis=0),
+        #     np.max(self.X, DOMAIN[:, 1])
+        # ]])
+        # print(f"DOMAIN: {DOMAIN}")
+
         return np.atleast_2d(x_opt)
 
     def optimize_acquisition_function(self):
@@ -109,11 +126,28 @@ class BO_algo():
         Z_f = (mu_f - f_best) / sigma_f
         ei_f = (mu_f - f_best) * norm.cdf(Z_f) + sigma_f * norm.pdf(Z_f)
 
+        ######################################
+        # method from hint
         # Penalty for constraint violation
-        penalty = LAMBDA * np.max(mu_v + sigma_v, 0)
+        # penalty = LAMBDA * np.max(mu_v + sigma_v, 0)
+        # af_value = ei_f - penalty
+        ######################################
 
-        # Modified Expected Improvement
-        af_value = ei_f - penalty
+        ######################################
+        # # Safe opt method
+        # # Probability of being safe, incorporating beta
+        # Z_v = (SAFETY_THRESHOLD - mu_v) / np.sqrt(sigma_v**2 + BETA)
+        # prob_safe = norm.cdf(Z_v)
+
+        # # Incorporating both objective improvement and safety
+        # af_value = ei_f * prob_safe
+        ######################################
+
+        ######################################
+        # # UCB method
+        penalty = LAMBDA * np.maximum(0, mu_v + sigma_v)
+        af_value = mu_f + KAPPA * sigma_f - penalty
+        ######################################
 
         return af_value.squeeze()
 
