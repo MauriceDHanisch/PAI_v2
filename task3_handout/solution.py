@@ -3,18 +3,17 @@ import numpy as np
 from scipy.optimize import fmin_l_bfgs_b
 # import additional ...
 from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import RBF, Matern
+from sklearn.gaussian_process.kernels import RBF, Matern, WhiteKernel, DotProduct, ConstantKernel
 from scipy.stats import norm
-import random
 
 # global variables
 DOMAIN = np.array([[0, 10]])  # restrict \theta in [0, 10]
 SAFETY_THRESHOLD = 4  # threshold, upper bound of SA
-
-# Set a fixed seed for reproducibility
-np.random.seed(0)
-random.seed(0)
-
+LAMBDA = 5  # weight of constraint violation
+LENGTH_F = 10  # length scale of f
+LENGTH_V = 1  # length scale of v
+SIGMA_F = 0.15  # noise level of f
+SIGMA_V = 1e-4  # noise level of v
 
 # TODO: implement a self-contained solution in the BO_algo class.
 # NOTE: main() is not called by the checker.
@@ -22,27 +21,16 @@ class BO_algo():
     def __init__(self):
         """Initializes the algorithm with a parameter configuration."""
         # TODO: Define all relevant class members for your BO algorithm here.
-        # self.gaussian_process_f = GaussianProcessRegressor(
-        #     kernel=Matern(length_scale=10.0, nu=2.5)
-        # )
         self.gaussian_process_f = GaussianProcessRegressor(
-            kernel=RBF(length_scale=10.0)
+            kernel=Matern(length_scale=LENGTH_F, nu=2.5) + WhiteKernel(noise_level=SIGMA_F**2),
         )
         self.gaussian_process_v = GaussianProcessRegressor(
-            kernel=Matern(length_scale=1.0, nu=2.5),
+            kernel=DotProduct(sigma_0=0) + Matern(length_scale=LENGTH_V, nu=2.5) + WhiteKernel(noise_level=SIGMA_V**2),
         )
-        self.X = np.array([[0]])
-        self.Y_f = np.array([[0]])
-        self.Y_v = np.array([[0]])
-        self.lambda_ = 0.1
+        self.X = None
+        self.Y_f = None
+        self.Y_v = None
         pass
-
-    def current_best(self):
-        if self.Y_f.size > 0:
-            return np.max(self.Y_f) - self.lambda_ * np.max(self.Y_v)  # Assuming maximization
-        else:
-            return 0  # Default value if no data is available
-
 
     def next_recommendation(self):
         """
@@ -57,8 +45,8 @@ class BO_algo():
         # using functions f and v.
         # In implementing this function, you may use
         # optimize_acquisition_function() defined below.
-        x_opt = np.array(self.optimize_acquisition_function())
-        return x_opt.reshape(1, -1)
+        x_opt = self.optimize_acquisition_function()
+        return np.atleast_2d(x_opt)
 
     def optimize_acquisition_function(self):
         """Optimizes the acquisition function defined below (DO NOT MODIFY).
@@ -110,20 +98,19 @@ class BO_algo():
         mu_f, sigma_f = self.gaussian_process_f.predict(x, return_std=True)
         mu_v, sigma_v = self.gaussian_process_v.predict(x, return_std=True)
         
-        f_best = self.current_best()
+        f_best = np.max(self.Y_f)
 
         # Expected Improvement
         Z_f = (mu_f - f_best) / sigma_f
         ei_f = (mu_f - f_best) * norm.cdf(Z_f) + sigma_f * norm.pdf(Z_f)
 
         # Penalty for constraint violation
-        penalty = np.maximum(0, mu_v - SAFETY_THRESHOLD)
-        weighted_penalty = np.exp(-self.lambda_ * penalty)  # Adjust lambda as needed
+        penalty = LAMBDA * np.max(mu_v + sigma_v, 0)
 
         # Modified Expected Improvement
-        modified_ei = ei_f * weighted_penalty
+        af_value = ei_f - penalty
 
-        return modified_ei
+        return af_value.squeeze()
 
     def add_data_point(self, x: float, f: float, v: float):
         """
@@ -139,14 +126,19 @@ class BO_algo():
             SA constraint func
         """
         # TODO: Add the observed data {x, f, v} to your model.
-        new_point = np.array([[x.squeeze()]])
-        new_f = np.array([[f.squeeze()]])
-        new_v = np.array([[v]] if np.isscalar(v) else [v.squeeze()])
+        new_point = np.atleast_2d(x)
+        new_f = np.atleast_2d(f)
+        new_v = np.atleast_2d(v)
 
         # Append the new data point to the existing dataset
-        self.X = np.vstack([self.X, new_point])
-        self.Y_f = np.vstack([self.Y_f, new_f])
-        self.Y_v = np.vstack([self.Y_v, new_v])
+        if self.X is None:
+            self.X = new_point
+            self.Y_f = new_f
+            self.Y_v = new_v
+        else:
+            self.X = np.vstack([self.X, new_point])
+            self.Y_f = np.vstack([self.Y_f, new_f])
+            self.Y_v = np.vstack([self.Y_v, new_v])
 
         # Re-train both models
         self.gaussian_process_f.fit(self.X, self.Y_f)
@@ -162,6 +154,8 @@ class BO_algo():
             the optimal solution of the problem
         """
         # TODO: Return your predicted safe optimum of f.
+        possible_index = np.where(self.Y_v < SAFETY_THRESHOLD)[0]
+
         if self.X.size > 0:
             best_index = np.argmax(self.Y_f)
             return self.X[best_index].item()
@@ -230,8 +224,6 @@ def main():
     for j in range(20):
         # Get next recommendation
         x = agent.next_recommendation()
-        print(f'Iteration {j + 1}: x={x}')
-        print(f'Domain shape: {DOMAIN.shape[0]}')
         # Check for valid shape
         assert x.shape == (1, DOMAIN.shape[0]), \
             f"The function next recommendation must return a numpy array of " \
