@@ -7,6 +7,7 @@ from sklearn.gaussian_process.kernels import RBF, Matern, WhiteKernel, DotProduc
 from scipy.stats import norm
 
 # global variables
+# only need to edit in here
 DOMAIN = np.array([[0, 10]])  # restrict \theta in [0, 10]
 SAFETY_THRESHOLD = 4  # threshold, upper bound of SA
 LAMBDA = 50  # weight of constraint violation
@@ -17,6 +18,9 @@ NU_V = 1.5  # smoothness of v
 SIGMA_F = 0.15  # noise level of f
 SIGMA_V = 1e-4  # noise level of v
 
+KERNEL_F = Matern(length_scale=LENGTH_F, nu=NU_F) + WhiteKernel(noise_level=SIGMA_F**2)
+KERNEL_V = DotProduct(sigma_0=0) + Matern(length_scale=LENGTH_V, nu=NU_V) + WhiteKernel(noise_level=SIGMA_V**2)
+
 # fix random seed for reproducibility
 np.random.seed(0)
 
@@ -26,12 +30,8 @@ class BO_algo():
     def __init__(self):
         """Initializes the algorithm with a parameter configuration."""
         # TODO: Define all relevant class members for your BO algorithm here.
-        self.gaussian_process_f = GaussianProcessRegressor(
-            kernel=Matern(length_scale=LENGTH_F, nu=NU_F) + WhiteKernel(noise_level=SIGMA_F**2),
-        )
-        self.gaussian_process_v = GaussianProcessRegressor(
-            kernel=DotProduct(sigma_0=0) + Matern(length_scale=LENGTH_V, nu=NU_V) + WhiteKernel(noise_level=SIGMA_V**2),
-        )
+        self.gaussian_process_f = GaussianProcessRegressor(kernel=KERNEL_F)
+        self.gaussian_process_v = GaussianProcessRegressor(kernel=KERNEL_V)
         self.X = None
         self.Y_f = None
         self.Y_v = None
