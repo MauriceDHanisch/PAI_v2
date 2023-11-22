@@ -10,7 +10,8 @@ from scipy.stats import norm
 # global variables
 DOMAIN = np.array([[0, 10]])  # restrict \theta in [0, 10]
 SAFETY_THRESHOLD = 4  # threshold, upper bound of SA
-LAMBDA = 50
+LAMBDA = 10
+np.random.seed(0)
 
 
 # TODO: implement a self-contained solution in the BO_algo class.
@@ -115,7 +116,7 @@ class BO_algo():
 
         # Calculate the penalty term based on constraint violations
         # Apply the penalty only when v(x) > 0
-        penalty = self.lambda_ * np.maximum(mu_v+sigma_v, 0)
+        penalty = self.lambda_ * np.maximum(mu_v, 0)
 
         # Subtract the penalty term from the Expected Improvement
         af_value = ei - penalty
@@ -140,7 +141,7 @@ class BO_algo():
         # Convert x, f, and v to np.ndarray and reshape for consistency
         x = np.atleast_2d(x)
         f = np.atleast_2d(f)
-        v = np.atleast_2d(v)
+        v = np.atleast_2d(v - SAFETY_THRESHOLD)
 
         # Update the sample datasets
         if self.X_sample is None:
@@ -167,7 +168,7 @@ class BO_algo():
         """
         # TODO: Return your predicted safe optimum of f.
         # Filter the samples that satisfy the constraint
-        feasible_indices = np.where(self.V_sample < SAFETY_THRESHOLD)[0]
+        feasible_indices = np.where(self.V_sample < -2e-4)[0]
         feasible_X = self.X_sample[feasible_indices]
         feasible_Y = self.Y_sample[feasible_indices]
 
