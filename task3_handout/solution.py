@@ -9,11 +9,16 @@ from scipy.stats import norm
 # global variables
 DOMAIN = np.array([[0, 10]])  # restrict \theta in [0, 10]
 SAFETY_THRESHOLD = 4  # threshold, upper bound of SA
-LAMBDA = 5  # weight of constraint violation
-LENGTH_F = 10  # length scale of f
+LAMBDA = 50  # weight of constraint violation
+LENGTH_F = 1  # length scale of f
 LENGTH_V = 1  # length scale of v
+NU_F = 1.5  # smoothness of f
+NU_V = 1.5  # smoothness of v
 SIGMA_F = 0.15  # noise level of f
 SIGMA_V = 1e-4  # noise level of v
+
+# fix random seed for reproducibility
+np.random.seed(0)
 
 # TODO: implement a self-contained solution in the BO_algo class.
 # NOTE: main() is not called by the checker.
@@ -22,10 +27,10 @@ class BO_algo():
         """Initializes the algorithm with a parameter configuration."""
         # TODO: Define all relevant class members for your BO algorithm here.
         self.gaussian_process_f = GaussianProcessRegressor(
-            kernel=Matern(length_scale=LENGTH_F, nu=2.5) + WhiteKernel(noise_level=SIGMA_F**2),
+            kernel=Matern(length_scale=LENGTH_F, nu=NU_F) + WhiteKernel(noise_level=SIGMA_F**2),
         )
         self.gaussian_process_v = GaussianProcessRegressor(
-            kernel=DotProduct(sigma_0=0) + Matern(length_scale=LENGTH_V, nu=2.5) + WhiteKernel(noise_level=SIGMA_V**2),
+            kernel=DotProduct(sigma_0=0) + Matern(length_scale=LENGTH_V, nu=NU_V) + WhiteKernel(noise_level=SIGMA_V**2),
         )
         self.X = None
         self.Y_f = None
