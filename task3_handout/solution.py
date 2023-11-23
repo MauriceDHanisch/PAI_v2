@@ -122,13 +122,14 @@ class BO_algo():
         
         f_best = np.max(self.Y_f)
 
-        # Expected Improvement
-        Z_f = (mu_f - f_best) / sigma_f
-        ei_f = (mu_f - f_best) * norm.cdf(Z_f) + sigma_f * norm.pdf(Z_f)
-
         ######################################
-        # method from hint
-        # Penalty for constraint violation
+        # # EI method
+        # # Expected Improvement
+        # Z_f = (mu_f - f_best) / sigma_f
+        # ei_f = (mu_f - f_best) * norm.cdf(Z_f) + sigma_f * norm.pdf(Z_f)
+
+        # # method from hint
+        # # Penalty for constraint violation
         # penalty = LAMBDA * np.max(mu_v + sigma_v, 0)
         # af_value = ei_f - penalty
         ######################################
