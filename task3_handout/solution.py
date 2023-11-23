@@ -120,11 +120,10 @@ class BO_algo():
         mu_f, sigma_f = self.gaussian_process_f.predict(x, return_std=True)
         mu_v, sigma_v = self.gaussian_process_v.predict(x, return_std=True)
         
-        f_best = np.max(self.Y_f)
 
         ######################################
         # # EI method
-        # # Expected Improvement
+        # f_best = np.max(self.Y_f)
         # Z_f = (mu_f - f_best) / sigma_f
         # ei_f = (mu_f - f_best) * norm.cdf(Z_f) + sigma_f * norm.pdf(Z_f)
 
