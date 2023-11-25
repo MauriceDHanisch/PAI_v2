@@ -11,8 +11,8 @@ from scipy.stats import norm
 DOMAIN = np.array([[0, 8]])  # restrict \theta in [0, 10]
 SAFETY_THRESHOLD = 4  # threshold, upper bound of SA
 BETA = 2 # safety parameter
-KAPPA = 1 # exploration parameter
-LAMBDA = 50 # weight of constraint violation
+KAPPA = 50 # exploration parameter
+LAMBDA = 10 # weight of constraint violation
 LENGTH_F = 1  # length scale of f
 LENGTH_V = 1  # length scale of v
 NU_F = 2.5  # smoothness of f
