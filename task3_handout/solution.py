@@ -8,7 +8,7 @@ from scipy.stats import norm
 
 # global variables
 # only need to edit in here
-DOMAIN = np.array([[0, 8]])  # restrict \theta in [0, 10]
+DOMAIN = np.array([[0, 10]])  # restrict \theta in [0, 10]
 SAFETY_THRESHOLD = 4  # threshold, upper bound of SA
 BETA = 2 # safety parameter
 KAPPA = 1 # exploration parameter
@@ -19,6 +19,8 @@ NU_F = 2.5  # smoothness of f
 NU_V = 2.5  # smoothness of v
 SIGMA_F = 0.15  # noise level of f
 SIGMA_V = 1e-4  # noise level of v
+
+UNSAFE_MARGIN = 0.5 # margin for unsafe points
 
 # MATERN KERNEL
 KERNEL_F = Matern(length_scale=LENGTH_F, nu=NU_F) + WhiteKernel(noise_level=SIGMA_F**2)
@@ -37,6 +39,7 @@ class BO_algo():
     def __init__(self):
         """Initializes the algorithm with a parameter configuration."""
         # TODO: Define all relevant class members for your BO algorithm here.
+        # mhanisch: why using GPRegressor? bcs specifically for regression task GP model
         self.gaussian_process_f = GaussianProcessRegressor(kernel=KERNEL_F)
         self.gaussian_process_v = GaussianProcessRegressor(kernel=KERNEL_V)
         self.X = None
@@ -47,30 +50,34 @@ class BO_algo():
     def next_recommendation(self):
         """
         Recommend the next input to sample.
-
+        
         Returns
         -------
         recommendation: float
             the next point to evaluate
         """
-        # TODO: Implement the function which recommends the next point to query
-        # using functions f and v.
-        # In implementing this function, you may use
-        # optimize_acquisition_function() defined below.
-        
-        x_opt = self.optimize_acquisition_function()
+        safe_indices = np.where(self.Y_v < SAFETY_THRESHOLD)[0]
+        if len(safe_indices) > 0:
+            # Select a random safe point
+            random_safe_index = np.random.choice(safe_indices)
+            safe_point = self.X[random_safe_index]
 
-        # # reduce domain to the range of possible x
-        # global DOMAIN
-        # DOMAIN = np.array([[
-        #     np.min(self.X, DOMAIN[:, 0], axis=0),
-        #     np.max(self.X, DOMAIN[:, 1])
-        # ]])
-        # print(f"DOMAIN: {DOMAIN}")
+            # Define a local neighborhood around this safe point
+            neighborhood_radius = UNSAFE_MARGIN  # Define this based on your domain knowledge
+            new_min = max(safe_point - neighborhood_radius, DOMAIN[0, 0])
+            new_max = min(safe_point + neighborhood_radius, DOMAIN[0, 1])
+            local_domain = np.array([[new_min, new_max]])
+
+            # Use the local domain to find the next recommendation
+            x_opt = self.optimize_acquisition_function(new_domain=local_domain)
+        else:
+            # If no safe points have been found, use the original domain
+            x_opt = self.optimize_acquisition_function(new_domain=DOMAIN)
 
         return np.atleast_2d(x_opt)
 
-    def optimize_acquisition_function(self):
+
+    def optimize_acquisition_function(self, new_domain=DOMAIN):
         """Optimizes the acquisition function defined below (DO NOT MODIFY).
 
         Returns
@@ -88,11 +95,11 @@ class BO_algo():
 
         # Restarts the optimization 20 times and pick best solution
         for _ in range(20):
-            x0 = DOMAIN[:, 0] + (DOMAIN[:, 1] - DOMAIN[:, 0]) * \
-                 np.random.rand(DOMAIN.shape[0])
-            result = fmin_l_bfgs_b(objective, x0=x0, bounds=DOMAIN,
+            x0 = new_domain[:, 0] + (new_domain[:, 1] - new_domain[:, 0]) * \
+                 np.random.rand(new_domain.shape[0])
+            result = fmin_l_bfgs_b(objective, x0=x0, bounds=new_domain,
                                    approx_grad=True)
-            x_values.append(np.clip(result[0], *DOMAIN[0]))
+            x_values.append(np.clip(result[0], *new_domain[0]))
             f_values.append(-result[1])
 
         ind = np.argmax(f_values)
@@ -116,7 +123,7 @@ class BO_algo():
         """
         x = np.atleast_2d(x)
         # TODO: Implement the acquisition function you want to optimize.
-        # Get the predictions from your Gaussian process model
+        # Get the predictions from the Gaussian process model
         mu_f, sigma_f = self.gaussian_process_f.predict(x, return_std=True)
         mu_v, sigma_v = self.gaussian_process_v.predict(x, return_std=True)
         
@@ -145,8 +152,8 @@ class BO_algo():
 
         ######################################
         # # UCB method
-        penalty = LAMBDA * np.maximum(0, mu_v + sigma_v)
-        af_value = mu_f + KAPPA * sigma_f - penalty
+        penalty = LAMBDA * np.maximum(0, mu_v + sigma_v) # penalty term for SA violation
+        af_value = mu_f + KAPPA * sigma_f - penalty # KAPPA is the exploration parameter 
         ######################################
 
         return af_value.squeeze()
@@ -179,7 +186,7 @@ class BO_algo():
             self.Y_f = np.vstack([self.Y_f, new_f])
             self.Y_v = np.vstack([self.Y_v, new_v])
 
-        # Re-train both models
+        # Re-train both models (mhanisch: NEEDED? absolutely because we have new data points)
         self.gaussian_process_f.fit(self.X, self.Y_f)
         self.gaussian_process_v.fit(self.X, self.Y_v)
 
@@ -193,10 +200,10 @@ class BO_algo():
             the optimal solution of the problem
         """
         # TODO: Return your predicted safe optimum of f.
-        possible_index = np.where(self.Y_v < SAFETY_THRESHOLD)[0]
+        # possible_index = np.where(self.Y_v < SAFETY_THRESHOLD)[0] mhanisch: not needed for now
 
         if self.X.size > 0:
-            best_index = np.argmax(self.Y_f)
+            best_index = np.argmax(self.Y_f) # mhanisch: shouldn't we add mean + std? 
             return self.X[best_index].item()
         else:
             raise ValueError("No data points available")
