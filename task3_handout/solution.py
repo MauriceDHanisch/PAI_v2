@@ -20,7 +20,8 @@ NU_V = 2.5  # smoothness of v
 SIGMA_F = 0.15  # noise level of f
 SIGMA_V = 1e-4  # noise level of v
 
-UNSAFE_MARGIN = 0.5 # margin for unsafe points
+UNSAFE_MARGIN = 0.1 # margin for unsafe points
+
 
 # MATERN KERNEL
 KERNEL_F = Matern(length_scale=LENGTH_F, nu=NU_F) + WhiteKernel(noise_level=SIGMA_F**2)
@@ -45,6 +46,10 @@ class BO_algo():
         self.X = None
         self.Y_f = None
         self.Y_v = None
+
+        self.unsafe_evaluation_count = 0
+        self.output_file_path = "/results/output.txt"
+
         pass
 
     def next_recommendation(self):
@@ -56,6 +61,7 @@ class BO_algo():
         recommendation: float
             the next point to evaluate
         """
+
         safe_indices = np.where(self.Y_v < SAFETY_THRESHOLD)[0]
         if len(safe_indices) > 0:
             # Select a random safe point
@@ -63,7 +69,10 @@ class BO_algo():
             safe_point = self.X[random_safe_index]
 
             # Define a local neighborhood around this safe point
-            neighborhood_radius = UNSAFE_MARGIN  # Define this based on your domain knowledge
+            if self.unsafe_evaluation_count >= 1:
+                neighborhood_radius = 0.0001
+            else:
+                neighborhood_radius = UNSAFE_MARGIN  # Define this based on your domain knowledge
             new_min = max(safe_point - neighborhood_radius, DOMAIN[0, 0])
             new_max = min(safe_point + neighborhood_radius, DOMAIN[0, 1])
             local_domain = np.array([[new_min, new_max]])
@@ -190,6 +199,43 @@ class BO_algo():
         self.gaussian_process_f.fit(self.X, self.Y_f)
         self.gaussian_process_v.fit(self.X, self.Y_v)
 
+        if v >= SAFETY_THRESHOLD:
+            self.unsafe_evaluation_count += 1
+
+    def write_to_file(self):
+        # Initialize values
+        current_unsafe_evaluations = 0
+        num_class_calls = 0
+
+        # Read the current values from the file and update totals
+        updated_lines = []
+        try:
+            with open(self.output_file_path, "r") as file:
+                for line in file:
+                    if "Total number of unsafe evaluations:" in line:
+                        current_unsafe_evaluations = int(line.split(":")[1].strip())
+                        new_total_unsafe_evaluations = current_unsafe_evaluations + self.unsafe_evaluation_count
+                        updated_lines.append(f"Total number of unsafe evaluations: {new_total_unsafe_evaluations}\n")
+                    elif "Num class calls:" in line:
+                        num_class_calls = int(line.split(":")[1].strip()) + 1
+                        updated_lines.append(f"Num class calls: {num_class_calls}\n")
+                    else:
+                        updated_lines.append(line)
+        except (FileNotFoundError, ValueError, IndexError):
+            # If the file doesn't exist, is empty, or contains invalid format, start from zero
+            updated_lines = [
+                f"Total number of unsafe evaluations: {self.unsafe_evaluation_count}\n",
+                f"Num class calls: 1\n"
+            ]
+
+        # Add warning if applicable
+        if self.unsafe_evaluation_count > 5:
+            updated_lines.append(f"WARNING: More than 5 ({self.unsafe_evaluation_count}) unsafe evaluations in iteration {num_class_calls} \n")
+
+        # Write the updated content back to the file
+        with open(self.output_file_path, "w") as file:
+            file.writelines(updated_lines)
+
     def get_solution(self):
         """
         Return x_opt that is believed to be the maximizer of f.
@@ -200,10 +246,10 @@ class BO_algo():
             the optimal solution of the problem
         """
         # TODO: Return your predicted safe optimum of f.
-        # possible_index = np.where(self.Y_v < SAFETY_THRESHOLD)[0] mhanisch: not needed for now
 
         if self.X.size > 0:
             best_index = np.argmax(self.Y_f) # mhanisch: shouldn't we add mean + std? 
+            self.write_to_file()
             return self.X[best_index].item()
         else:
             raise ValueError("No data points available")
