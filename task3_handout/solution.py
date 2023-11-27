@@ -1,6 +1,7 @@
 """Solution."""
 import numpy as np
 from scipy.optimize import fmin_l_bfgs_b
+<<<<<<< HEAD
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import Matern, RBF, DotProduct, WhiteKernel
 from scipy.stats import norm
@@ -13,6 +14,39 @@ SAFETY_THRESHOLD = 4  # threshold, upper bound of SA
 LAMBDA = 10
 np.random.seed(0)
 
+=======
+# import additional ...
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process.kernels import RBF, Matern, WhiteKernel, DotProduct, ConstantKernel
+from scipy.stats import norm
+
+# global variables
+# only need to edit in here
+DOMAIN = np.array([[0, 10]])  # restrict \theta in [0, 10]
+SAFETY_THRESHOLD = 4  # threshold, upper bound of SA
+BETA = 2 # safety parameter
+KAPPA = 1 # exploration parameter
+LAMBDA = 50 # weight of constraint violation
+LENGTH_F = 1  # length scale of f
+LENGTH_V = 1  # length scale of v
+NU_F = 2.5  # smoothness of f
+NU_V = 2.5  # smoothness of v
+SIGMA_F = 0.15  # noise level of f
+SIGMA_V = 1e-4  # noise level of v
+
+UNSAFE_MARGIN = 0.5 # margin for unsafe points
+
+# MATERN KERNEL
+KERNEL_F = Matern(length_scale=LENGTH_F, nu=NU_F) + WhiteKernel(noise_level=SIGMA_F**2)
+KERNEL_V = DotProduct(sigma_0=0) + Matern(length_scale=LENGTH_V, nu=NU_V) + WhiteKernel(noise_level=SIGMA_V**2)
+
+# # RBF KERNEL
+# KERNEL_F = np.sqrt(2) * RBF(length_scale=LENGTH_F) + WhiteKernel(noise_level=SIGMA_F**2)
+# KERNEL_V = 0.5 * RBF(length_scale=LENGTH_V) + WhiteKernel(noise_level=SIGMA_V**2)
+
+# # fix random seed for reproducibility while tuning hyperparameters
+np.random.seed(0)
+>>>>>>> main
 
 # TODO: implement a self-contained solution in the BO_algo class.
 # NOTE: main() is not called by the checker.
@@ -20,6 +54,7 @@ class BO_algo():
     def __init__(self):
         """Initializes the algorithm with a parameter configuration."""
         # TODO: Define all relevant class members for your BO algorithm here.
+<<<<<<< HEAD
         self.lambda_ = LAMBDA
         self.data = []
         self.gp = GaussianProcessRegressor(
@@ -29,16 +64,30 @@ class BO_algo():
         self.X_sample = None
         self.Y_sample = None
         self.V_sample = None
+=======
+        # mhanisch: why using GPRegressor? bcs specifically for regression task GP model
+        self.gaussian_process_f = GaussianProcessRegressor(kernel=KERNEL_F)
+        self.gaussian_process_v = GaussianProcessRegressor(kernel=KERNEL_V)
+        self.X = None
+        self.Y_f = None
+        self.Y_v = None
+        pass
+>>>>>>> main
 
     def next_recommendation(self):
         """
         Recommend the next input to sample.
+<<<<<<< HEAD
 
+=======
+        
+>>>>>>> main
         Returns
         -------
         recommendation: float
             the next point to evaluate
         """
+<<<<<<< HEAD
         # TODO: Implement the function which recommends the next point to query
         # using functions f and v.
         # In implementing this function, you may use
@@ -52,6 +101,30 @@ class BO_algo():
         return np.atleast_2d(x_opt)
 
     def optimize_acquisition_function(self):
+=======
+        safe_indices = np.where(self.Y_v < SAFETY_THRESHOLD)[0]
+        if len(safe_indices) > 0:
+            # Select a random safe point
+            random_safe_index = np.random.choice(safe_indices)
+            safe_point = self.X[random_safe_index]
+
+            # Define a local neighborhood around this safe point
+            neighborhood_radius = UNSAFE_MARGIN  # Define this based on your domain knowledge
+            new_min = max(safe_point - neighborhood_radius, DOMAIN[0, 0])
+            new_max = min(safe_point + neighborhood_radius, DOMAIN[0, 1])
+            local_domain = np.array([[new_min, new_max]])
+
+            # Use the local domain to find the next recommendation
+            x_opt = self.optimize_acquisition_function(new_domain=local_domain)
+        else:
+            # If no safe points have been found, use the original domain
+            x_opt = self.optimize_acquisition_function(new_domain=DOMAIN)
+
+        return np.atleast_2d(x_opt)
+
+
+    def optimize_acquisition_function(self, new_domain=DOMAIN):
+>>>>>>> main
         """Optimizes the acquisition function defined below (DO NOT MODIFY).
 
         Returns
@@ -62,18 +135,30 @@ class BO_algo():
         """
 
         def objective(x):
+<<<<<<< HEAD
             return -self.acquisition_function(x)[0]
+=======
+            return -self.acquisition_function(x)
+>>>>>>> main
 
         f_values = []
         x_values = []
 
         # Restarts the optimization 20 times and pick best solution
         for _ in range(20):
+<<<<<<< HEAD
             x0 = DOMAIN[:, 0] + (DOMAIN[:, 1] - DOMAIN[:, 0]) * \
                 np.random.rand(DOMAIN.shape[0])
             result = fmin_l_bfgs_b(objective, x0=x0, bounds=DOMAIN,
                                    approx_grad=True)
             x_values.append(np.clip(result[0], *DOMAIN[0]))
+=======
+            x0 = new_domain[:, 0] + (new_domain[:, 1] - new_domain[:, 0]) * \
+                 np.random.rand(new_domain.shape[0])
+            result = fmin_l_bfgs_b(objective, x0=x0, bounds=new_domain,
+                                   approx_grad=True)
+            x_values.append(np.clip(result[0], *new_domain[0]))
+>>>>>>> main
             f_values.append(-result[1])
 
         ind = np.argmax(f_values)
@@ -92,11 +177,16 @@ class BO_algo():
         Returns
         ------
         af_value: np.ndarray
+<<<<<<< HEAD
             shape (N, 1)nh
+=======
+            shape (N, 1)
+>>>>>>> main
             Value of the acquisition function at x
         """
         x = np.atleast_2d(x)
         # TODO: Implement the acquisition function you want to optimize.
+<<<<<<< HEAD
         #  Predict the mean and standard deviation of each point x
         # Expected Improvement for f
         mu, sigma = self.gp.predict(x, return_std=True)
@@ -122,6 +212,42 @@ class BO_algo():
         af_value = ei - penalty
 
         return af_value.reshape(-1, 1)
+=======
+        # Get the predictions from the Gaussian process model
+        mu_f, sigma_f = self.gaussian_process_f.predict(x, return_std=True)
+        mu_v, sigma_v = self.gaussian_process_v.predict(x, return_std=True)
+        
+
+        ######################################
+        # # EI method
+        # f_best = np.max(self.Y_f)
+        # Z_f = (mu_f - f_best) / sigma_f
+        # ei_f = (mu_f - f_best) * norm.cdf(Z_f) + sigma_f * norm.pdf(Z_f)
+
+        # # method from hint
+        # # Penalty for constraint violation
+        # penalty = LAMBDA * np.max(mu_v + sigma_v, 0)
+        # af_value = ei_f - penalty
+        ######################################
+
+        ######################################
+        # # Safe opt method
+        # # Probability of being safe, incorporating beta
+        # Z_v = (SAFETY_THRESHOLD - mu_v) / np.sqrt(sigma_v**2 + BETA)
+        # prob_safe = norm.cdf(Z_v)
+
+        # # Incorporating both objective improvement and safety
+        # af_value = ei_f * prob_safe
+        ######################################
+
+        ######################################
+        # # UCB method
+        penalty = LAMBDA * np.maximum(0, mu_v + sigma_v) # penalty term for SA violation
+        af_value = mu_f + KAPPA * sigma_f - penalty # KAPPA is the exploration parameter 
+        ######################################
+
+        return af_value.squeeze()
+>>>>>>> main
 
     def add_data_point(self, x: float, f: float, v: float):
         """
@@ -137,6 +263,7 @@ class BO_algo():
             SA constraint func
         """
         # TODO: Add the observed data {x, f, v} to your model.
+<<<<<<< HEAD
         # raise NotImplementedError
         # Convert x, f, and v to np.ndarray and reshape for consistency
         x = np.atleast_2d(x)
@@ -156,6 +283,25 @@ class BO_algo():
         # Retrain the Gaussian Process models
         self.gp.fit(self.X_sample, self.Y_sample)
         self.gp_v.fit(self.X_sample, self.V_sample)
+=======
+        new_point = np.atleast_2d(x)
+        new_f = np.atleast_2d(f)
+        new_v = np.atleast_2d(v)
+
+        # Append the new data point to the existing dataset
+        if self.X is None:
+            self.X = new_point
+            self.Y_f = new_f
+            self.Y_v = new_v
+        else:
+            self.X = np.vstack([self.X, new_point])
+            self.Y_f = np.vstack([self.Y_f, new_f])
+            self.Y_v = np.vstack([self.Y_v, new_v])
+
+        # Re-train both models (mhanisch: NEEDED? absolutely because we have new data points)
+        self.gaussian_process_f.fit(self.X, self.Y_f)
+        self.gaussian_process_v.fit(self.X, self.Y_v)
+>>>>>>> main
 
     def get_solution(self):
         """
@@ -167,6 +313,7 @@ class BO_algo():
             the optimal solution of the problem
         """
         # TODO: Return your predicted safe optimum of f.
+<<<<<<< HEAD
         # Filter the samples that satisfy the constraint
         feasible_indices = np.where(self.V_sample < -2e-4)[0]
         feasible_X = self.X_sample[feasible_indices]
@@ -185,6 +332,15 @@ class BO_algo():
         return solution
 
         # raise NotImplementedError
+=======
+        # possible_index = np.where(self.Y_v < SAFETY_THRESHOLD)[0] mhanisch: not needed for now
+
+        if self.X.size > 0:
+            best_index = np.argmax(self.Y_f) # mhanisch: shouldn't we add mean + std? 
+            return self.X[best_index].item()
+        else:
+            raise ValueError("No data points available")
+>>>>>>> main
 
     def plot(self, plot_recommendation: bool = True):
         """Plot objective and constraint posterior for debugging (OPTIONAL).
@@ -237,15 +393,26 @@ def main():
 
     # Add initial safe point
     x_init = get_initial_safe_point()
+<<<<<<< HEAD
     obj_val = f(x_init)
     cost_val = v(x_init)
+=======
+    print(f'Initial safe point: {x_init}')
+    obj_val = f(x_init)
+    print(f'Initial objective value: {obj_val}')
+    cost_val = v(x_init)
+    print(f'Initial constraint value: {cost_val}')
+>>>>>>> main
     agent.add_data_point(x_init, obj_val, cost_val)
 
     # Loop until budget is exhausted
     for j in range(20):
         # Get next recommendation
         x = agent.next_recommendation()
+<<<<<<< HEAD
 
+=======
+>>>>>>> main
         # Check for valid shape
         assert x.shape == (1, DOMAIN.shape[0]), \
             f"The function next recommendation must return a numpy array of " \

@@ -3,8 +3,12 @@ COPY env.yaml /tmp/env.yaml
 RUN micromamba install -y -n base -f /tmp/env.yaml && \
     micromamba clean --all --yes
 ARG MAMBA_DOCKERFILE_ACTIVATE=1  # (otherwise python will not be found)
+<<<<<<< HEAD
 RUN pip install pyarmor==6.7.4
 RUN pip install cryptography
+=======
+RUN pip install pyarmor==6.7.4 torch==2.0.1
+>>>>>>> main
 WORKDIR /code
 ADD * /code/
 ADD pytransform /code/pytransform

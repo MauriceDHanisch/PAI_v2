@@ -78,9 +78,14 @@ class Model(object):
             containing your predictions, the GP posterior mean, and the GP posterior stddev (in that order)
         """
 
-        gp_mean, gp_std = self.gp.predict(test_x_2D, return_std=True)
-        adjustment = np.where(test_x_AREA, gp_std, 0)
-        predictions = gp_mean + adjustment
+        # TODO: Use your GP to estimate the posterior mean and stddev for each city_area here
+        gp_mean = np.zeros(test_x_2D.shape[0], dtype=float)
+        gp_std = np.zeros(test_x_2D.shape[0], dtype=float)
+
+        gp_mean, gp_std = self.gpr.predict(test_x_2D, return_std=True)    
+
+        # TODO: Use the GP posterior to form your predictions here
+        predictions = gp_mean + np.where(test_x_AREA, gp_std, 0)
 
         return predictions, gp_mean, gp_std
     
@@ -101,7 +106,7 @@ class Model(object):
         """
         # Take a random subset of the training data
         print('\n Taking a random subset of the training data \n')
-        percentage = 100
+        percentage = 1
         train_x_2D, train_y = self.few_percent(percentage, train_y, train_x_2D)
 
         print(f'\n ----- Fitting the GP with {percentage}%-------\n')
@@ -125,8 +130,7 @@ def cost_function(ground_truth: np.ndarray, predictions: np.ndarray, AREA_idxs: 
     weights = np.ones_like(cost) * COST_W_NORMAL
 
     # Case i): underprediction
-    mask = (predictions < ground_truth) & [
-        bool(AREA_idx) for AREA_idx in AREA_idxs]
+    mask = (predictions < ground_truth) & [bool(AREA_idx) for AREA_idx in AREA_idxs]
     weights[mask] = COST_W_UNDERPREDICT
 
     # Weigh the cost and return the average
@@ -254,7 +258,7 @@ def main():
     # Fit the model
     print('Fitting model')
     model = Model()
-    model.fitting_model(train_y, train_x_2D)
+    model.fitting_model(train_y,train_x_2D)
 
     # Predict on the test features
     print('Predicting on test features')
@@ -263,7 +267,6 @@ def main():
 
     if EXTENDED_EVALUATION:
         perform_extended_evaluation(model, output_dir='.')
-
 
 if __name__ == "__main__":
     main()
