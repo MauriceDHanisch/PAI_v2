@@ -1,6 +1,20 @@
 """Solution."""
 import numpy as np
 from scipy.optimize import fmin_l_bfgs_b
+<<<<<<< HEAD
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process.kernels import Matern, RBF, DotProduct, WhiteKernel
+from scipy.stats import norm
+# import additional ...
+
+
+# global variables
+DOMAIN = np.array([[0, 10]])  # restrict \theta in [0, 10]
+SAFETY_THRESHOLD = 4  # threshold, upper bound of SA
+LAMBDA = 10
+np.random.seed(0)
+
+=======
 # import additional ...
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF, Matern, WhiteKernel, DotProduct, ConstantKernel
@@ -33,6 +47,7 @@ KERNEL_V = DotProduct(sigma_0=0) + Matern(length_scale=LENGTH_V, nu=NU_V) + Whit
 
 # # fix random seed for reproducibility while tuning hyperparameters
 np.random.seed(0)
+>>>>>>> main
 
 # TODO: implement a self-contained solution in the BO_algo class.
 # NOTE: main() is not called by the checker.
@@ -40,6 +55,17 @@ class BO_algo():
     def __init__(self):
         """Initializes the algorithm with a parameter configuration."""
         # TODO: Define all relevant class members for your BO algorithm here.
+<<<<<<< HEAD
+        self.lambda_ = LAMBDA
+        self.data = []
+        self.gp = GaussianProcessRegressor(
+            kernel=Matern(nu=2.5, length_scale=1.0) + WhiteKernel(noise_level=0.15**2))
+        self.gp_v = GaussianProcessRegressor(
+            kernel=(DotProduct(sigma_0=0) + Matern(nu=2.5, length_scale=1.0) + WhiteKernel(noise_level=1e-8)))
+        self.X_sample = None
+        self.Y_sample = None
+        self.V_sample = None
+=======
         # mhanisch: why using GPRegressor? bcs specifically for regression task GP model
         self.gaussian_process_f = GaussianProcessRegressor(kernel=KERNEL_F)
         self.gaussian_process_v = GaussianProcessRegressor(kernel=KERNEL_V)
@@ -51,17 +77,36 @@ class BO_algo():
         self.output_file_path = "/results/output.txt"
 
         pass
+>>>>>>> main
 
     def next_recommendation(self):
         """
         Recommend the next input to sample.
+<<<<<<< HEAD
+
+=======
         
+>>>>>>> main
         Returns
         -------
         recommendation: float
             the next point to evaluate
         """
+<<<<<<< HEAD
+        # TODO: Implement the function which recommends the next point to query
+        # using functions f and v.
+        # In implementing this function, you may use
+        # optimize_acquisition_function() defined below.
 
+        # raise NotImplementedError
+
+        # Optimize the acquisition function
+        x_opt = self.optimize_acquisition_function()
+
+        return np.atleast_2d(x_opt)
+
+    def optimize_acquisition_function(self):
+=======
         safe_indices = np.where(self.Y_v < SAFETY_THRESHOLD)[0]
         if len(safe_indices) > 0:
             # Select a random safe point
@@ -87,6 +132,7 @@ class BO_algo():
 
 
     def optimize_acquisition_function(self, new_domain=DOMAIN):
+>>>>>>> main
         """Optimizes the acquisition function defined below (DO NOT MODIFY).
 
         Returns
@@ -97,18 +143,30 @@ class BO_algo():
         """
 
         def objective(x):
+<<<<<<< HEAD
+            return -self.acquisition_function(x)[0]
+=======
             return -self.acquisition_function(x)
+>>>>>>> main
 
         f_values = []
         x_values = []
 
         # Restarts the optimization 20 times and pick best solution
         for _ in range(20):
+<<<<<<< HEAD
+            x0 = DOMAIN[:, 0] + (DOMAIN[:, 1] - DOMAIN[:, 0]) * \
+                np.random.rand(DOMAIN.shape[0])
+            result = fmin_l_bfgs_b(objective, x0=x0, bounds=DOMAIN,
+                                   approx_grad=True)
+            x_values.append(np.clip(result[0], *DOMAIN[0]))
+=======
             x0 = new_domain[:, 0] + (new_domain[:, 1] - new_domain[:, 0]) * \
                  np.random.rand(new_domain.shape[0])
             result = fmin_l_bfgs_b(objective, x0=x0, bounds=new_domain,
                                    approx_grad=True)
             x_values.append(np.clip(result[0], *new_domain[0]))
+>>>>>>> main
             f_values.append(-result[1])
 
         ind = np.argmax(f_values)
@@ -127,11 +185,42 @@ class BO_algo():
         Returns
         ------
         af_value: np.ndarray
+<<<<<<< HEAD
+            shape (N, 1)nh
+=======
             shape (N, 1)
+>>>>>>> main
             Value of the acquisition function at x
         """
         x = np.atleast_2d(x)
         # TODO: Implement the acquisition function you want to optimize.
+<<<<<<< HEAD
+        #  Predict the mean and standard deviation of each point x
+        # Expected Improvement for f
+        mu, sigma = self.gp.predict(x, return_std=True)
+        mu_sample_opt = np.max(self.Y_sample)
+        imp = mu - mu_sample_opt
+        Z = imp / sigma
+        ei = imp * norm.cdf(Z) + sigma * norm.pdf(Z)
+        ei[sigma == 0.0] = 0.0
+
+        # Probability of satisfying the constraint
+        mu_v, sigma_v = self.gp_v.predict(x, return_std=True)
+        # prob_feasibility = norm.cdf((SAFETY_THRESHOLD - mu_v) / sigma_v)
+
+        # Adjust EI by the probability of feasibility
+        # af_value = ei * prob_feasibility
+        # print(af_value.shape)
+
+        # Calculate the penalty term based on constraint violations
+        # Apply the penalty only when v(x) > 0
+        penalty = self.lambda_ * np.maximum(mu_v, 0)
+
+        # Subtract the penalty term from the Expected Improvement
+        af_value = ei - penalty
+
+        return af_value.reshape(-1, 1)
+=======
         # Get the predictions from the Gaussian process model
         mu_f, sigma_f = self.gaussian_process_f.predict(x, return_std=True)
         mu_v, sigma_v = self.gaussian_process_v.predict(x, return_std=True)
@@ -166,6 +255,7 @@ class BO_algo():
         ######################################
 
         return af_value.squeeze()
+>>>>>>> main
 
     def add_data_point(self, x: float, f: float, v: float):
         """
@@ -181,6 +271,27 @@ class BO_algo():
             SA constraint func
         """
         # TODO: Add the observed data {x, f, v} to your model.
+<<<<<<< HEAD
+        # raise NotImplementedError
+        # Convert x, f, and v to np.ndarray and reshape for consistency
+        x = np.atleast_2d(x)
+        f = np.atleast_2d(f)
+        v = np.atleast_2d(v - SAFETY_THRESHOLD)
+
+        # Update the sample datasets
+        if self.X_sample is None:
+            self.X_sample = x
+            self.Y_sample = f
+            self.V_sample = v
+        else:
+            self.X_sample = np.vstack([self.X_sample, x])
+            self.Y_sample = np.vstack([self.Y_sample, f])
+            self.V_sample = np.vstack([self.V_sample, v])
+
+        # Retrain the Gaussian Process models
+        self.gp.fit(self.X_sample, self.Y_sample)
+        self.gp_v.fit(self.X_sample, self.V_sample)
+=======
         new_point = np.atleast_2d(x)
         new_f = np.atleast_2d(f)
         new_v = np.atleast_2d(v)
@@ -198,43 +309,7 @@ class BO_algo():
         # Re-train both models (mhanisch: NEEDED? absolutely because we have new data points)
         self.gaussian_process_f.fit(self.X, self.Y_f)
         self.gaussian_process_v.fit(self.X, self.Y_v)
-
-        if v >= SAFETY_THRESHOLD:
-            self.unsafe_evaluation_count += 1
-
-    def write_to_file(self):
-        # Initialize values
-        current_unsafe_evaluations = 0
-        num_class_calls = 0
-
-        # Read the current values from the file and update totals
-        updated_lines = []
-        try:
-            with open(self.output_file_path, "r") as file:
-                for line in file:
-                    if "Total number of unsafe evaluations:" in line:
-                        current_unsafe_evaluations = int(line.split(":")[1].strip())
-                        new_total_unsafe_evaluations = current_unsafe_evaluations + self.unsafe_evaluation_count
-                        updated_lines.append(f"Total number of unsafe evaluations: {new_total_unsafe_evaluations}\n")
-                    elif "Num class calls:" in line:
-                        num_class_calls = int(line.split(":")[1].strip()) + 1
-                        updated_lines.append(f"Num class calls: {num_class_calls}\n")
-                    else:
-                        updated_lines.append(line)
-        except (FileNotFoundError, ValueError, IndexError):
-            # If the file doesn't exist, is empty, or contains invalid format, start from zero
-            updated_lines = [
-                f"Total number of unsafe evaluations: {self.unsafe_evaluation_count}\n",
-                f"Num class calls: 1\n"
-            ]
-
-        # Add warning if applicable
-        if self.unsafe_evaluation_count > 5:
-            updated_lines.append(f"WARNING: More than 5 ({self.unsafe_evaluation_count}) unsafe evaluations in iteration {num_class_calls} \n")
-
-        # Write the updated content back to the file
-        with open(self.output_file_path, "w") as file:
-            file.writelines(updated_lines)
+>>>>>>> main
 
     def get_solution(self):
         """
@@ -246,6 +321,27 @@ class BO_algo():
             the optimal solution of the problem
         """
         # TODO: Return your predicted safe optimum of f.
+<<<<<<< HEAD
+        # Filter the samples that satisfy the constraint
+        feasible_indices = np.where(self.V_sample < -2e-4)[0]
+        feasible_X = self.X_sample[feasible_indices]
+        feasible_Y = self.Y_sample[feasible_indices]
+
+        if len(feasible_Y) == 0:
+            raise ValueError(
+                "No feasible solution found under the given constraint.")
+
+        # Find the index of the maximum value in feasible_Y
+        max_index = np.argmax(feasible_Y)
+
+        # The optimal solution is the corresponding x value
+        solution = feasible_X[max_index].item()
+
+        return solution
+
+        # raise NotImplementedError
+=======
+        # possible_index = np.where(self.Y_v < SAFETY_THRESHOLD)[0] mhanisch: not needed for now
 
         if self.X.size > 0:
             best_index = np.argmax(self.Y_f) # mhanisch: shouldn't we add mean + std? 
@@ -253,6 +349,7 @@ class BO_algo():
             return self.X[best_index].item()
         else:
             raise ValueError("No data points available")
+>>>>>>> main
 
     def plot(self, plot_recommendation: bool = True):
         """Plot objective and constraint posterior for debugging (OPTIONAL).
@@ -305,17 +402,26 @@ def main():
 
     # Add initial safe point
     x_init = get_initial_safe_point()
+<<<<<<< HEAD
+    obj_val = f(x_init)
+    cost_val = v(x_init)
+=======
     print(f'Initial safe point: {x_init}')
     obj_val = f(x_init)
     print(f'Initial objective value: {obj_val}')
     cost_val = v(x_init)
     print(f'Initial constraint value: {cost_val}')
+>>>>>>> main
     agent.add_data_point(x_init, obj_val, cost_val)
 
     # Loop until budget is exhausted
     for j in range(20):
         # Get next recommendation
         x = agent.next_recommendation()
+<<<<<<< HEAD
+
+=======
+>>>>>>> main
         # Check for valid shape
         assert x.shape == (1, DOMAIN.shape[0]), \
             f"The function next recommendation must return a numpy array of " \

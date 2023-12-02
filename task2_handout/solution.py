@@ -129,6 +129,11 @@ class SWAGInference(object):
         self,
         train_xs: torch.Tensor,
         model_dir: pathlib.Path,
+<<<<<<< HEAD
+        # TODO(1): change inference_mode to InferenceMode.SWAG_DIAGONAL
+        # TODO(2): change inference_mode to InferenceMode.SWAG_FULL
+=======
+>>>>>>> main
         inference_mode: InferenceMode = InferenceMode.SWAG_FULL,
         # TODO(2): optionally add/tweak hyperparameters
         swag_epochs: int = 30,
@@ -172,16 +177,32 @@ class SWAGInference(object):
         
         # SWAG-diagonal
         self.mean = self._create_weight_copy()
+<<<<<<< HEAD
+        self.square_mean = self._create_weight_copy()
+        self.diagonal = self._create_weight_copy()
+        self.epoch = 0
+        # TODO(1): create attributes for SWAG-diagonal
+        #  Hint: self._create_weight_copy() creates an all-zero copy of the weights
+        #  as a dictionary that maps from weight name to values.
+        #  Hint: you never need to consider the full vector of weights,
+        #  but can always act on per-layer weights (in the format that _create_weight_copy() returns)
+=======
         self.sq_mean = self._create_weight_copy()
         # Initialize zero torch of the size and for each param
         self.n_models = 0  # Keep track of the number of models
 
+>>>>>>> main
 
         # Full SWAG
         # TODO(2): create attributes for SWAG-Full
         #  Hint: check collections.deque
+<<<<<<< HEAD
+        self.deviation_matrix = {name: collections.deque(
+            maxlen=self.deviation_matrix_max_rank) for name, param in self.network.named_parameters()}
+=======
         self.deviation_matrix_max_rank = deviation_matrix_max_rank
         self.deviations = collections.deque(maxlen=self.deviation_matrix_max_rank)
+>>>>>>> main
 
         # Calibration, prediction, and other attributes
         # TODO(2): create additional attributes, e.g., for calibration
@@ -199,6 +220,22 @@ class SWAGInference(object):
         # Increment the number of models
         self.n_models += 1
         for name, param in current_params.items():
+<<<<<<< HEAD
+            self.mean[name] = (self.mean[name] *
+                               self.epoch + param) / (self.epoch + 1)
+            self.square_mean[name] = (
+                self.square_mean[name] * self.epoch + param ** 2) / (self.epoch + 1)
+            self.diagonal[name] = self.square_mean[name] - \
+                self.mean[name] ** 2
+            # TODO(1): update SWAG-diagonal attributes for weight `name` using `current_params` and `param`
+            # raise NotImplementedError("Update SWAG-diagonal statistics")
+
+            # Full SWAG
+            if self.inference_mode == InferenceMode.SWAG_FULL:
+                # TODO(2): update full SWAG attributes for weight `name` using `current_params` and `param`
+                # raise NotImplementedError("Update full SWAG statistics")
+                self.deviation_matrix[name].append(param - self.mean[name])
+=======
             # Update running mean
             self.mean[name] = self.mean[name] * (self.n_models - 1) / self.n_models + param / self.n_models
             
@@ -210,6 +247,7 @@ class SWAGInference(object):
         if self.inference_mode == InferenceMode.SWAG_FULL:
             # Compute the deviation from the mean
             deviation = {name: (param - self.mean[name]).detach() for name, param in current_params.items()}
+>>>>>>> main
 
             # Update the low-rank part of the covariance
             if len(self.deviations) < self.deviation_matrix_max_rank:
@@ -365,9 +403,18 @@ class SWAGInference(object):
             for model_sample_predictions in per_model_sample_predictions
         )
 
+<<<<<<< HEAD
+        # TODO(1): Average predictions from different model samples into bma_probabilities
+        # raise NotImplementedError("Aggregate predictions from model samples")
+        # bma_probabilities = torch.stack(
+        #    per_model_sample_predictions).mean(dim=0)
+        bma_probabilities = sum(per_model_sample_predictions)/self.bma_samples
+
+=======
         bma_probabilities = torch.stack(per_model_sample_predictions).mean(dim=0)
         #print("BMA probabilities shape:", bma_probabilities.shape)
         #print("BMA probabilities sum per sample:", torch.sum(bma_probabilities, dim=1))
+>>>>>>> main
         assert bma_probabilities.dim() == 2 and bma_probabilities.size(1) == 6  # N x C
         return bma_probabilities
 
@@ -382,11 +429,15 @@ class SWAGInference(object):
             # SWAG-diagonal part
             z_1 = torch.randn(param.size(), device=self.device)
             current_mean = self.mean[name]
+<<<<<<< HEAD
+            current_std = (self.diagonal[name]/2).sqrt()
+=======
             current_sq_mean = self.sq_mean[name]
             # Adjust the variance calculation as per the photo
             current_var = (0.5 * (current_sq_mean - current_mean.pow(2))).to(self.device)
             current_std = torch.sqrt(current_var)
             
+>>>>>>> main
             assert current_mean.size() == param.size() and current_std.size() == param.size()
 
             # Sample the diagonal part
@@ -394,6 +445,15 @@ class SWAGInference(object):
 
             # Full SWAG part
             if self.inference_mode == InferenceMode.SWAG_FULL:
+<<<<<<< HEAD
+                # TODO(2): Sample parameter values for full SWAG
+                # raise NotImplementedError("Sample parameter for full SWAG")
+                z_2 = torch.randn(len(self.deviation_matrix[name]))
+                term = sum([z_2[i]*self.deviation_matrix[name][i]/np.sqrt(
+                    2*(self.deviation_matrix_max_rank-1)) for i in range(z_2.size()[0])])
+                assert term.size() == param.size()
+                sampled_param += term
+=======
                 # Prepare a list to hold the deviation updates
                 deviation_updates = []
                 # Iterate over the deviations deque, which contains dictionaries
@@ -403,6 +463,7 @@ class SWAGInference(object):
                     z = torch.randn(1, device=self.device)
                     deviation_update = (1/(2*self.deviation_matrix_max_rank)**0.5) * deviation * z
                     deviation_updates.append(deviation_update)
+>>>>>>> main
 
                 # Sum all deviation updates (assuming they are properly sized tensors)
                 if deviation_updates:
