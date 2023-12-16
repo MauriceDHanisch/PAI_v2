@@ -35,7 +35,6 @@ class NeuralNetwork(nn.Module):
         self.relu = nn.ReLU()
         self.fc1 = nn.Linear(input_dim, hidden_size)
         self.fc2 = nn.Linear(hidden_size, hidden_size)
-        self.fc3 = nn.Linear(hidden_size, output_dim)
         self.mean_layer = nn.Linear(hidden_size, output_dim)
         self.log_std_layer = nn.Linear(hidden_size, output_dim)
 
