@@ -1,7 +1,7 @@
 # PAI_v2
 
 ## Overview
-PAI repo for projects > 0
+Probabilistic AI repo for projects > 0.
 
 ## Installation
 
